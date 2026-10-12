@@ -1,0 +1,93 @@
+# =============================================================================
+# docker-compose.override.yml — cấu hình môi trường dev local (Phase 0)
+#
+# Docker Compose tự động gộp file này với docker-compose.yml.
+# Không sửa code ứng dụng; chỉ bù các chỗ Compose đang lệch so với k8s/configmap.yaml
+# để hệ thống khởi động được, và thêm profile để không phải chạy cả 13 service.
+#
+# Cách dùng:
+#   docker compose --profile core up -d    # hạ tầng + 6 service trên luồng đặt hàng
+#   docker compose --profile full up -d    # toàn bộ hệ thống
+#   docker compose --profile core down
+#
+# Technical debt được bù tạm ở đây (xử lý triệt để ở các phase sau):
+#   1. Liquibase changelog của nhiều service chỉ là placeholder `SELECT 1;`,
+#      trong khi ddl-auto = validate → thiếu bảng, service crash.
+#      K8s chạy được vì configmap đặt SPRING_JPA_HIBERNATE_DDL_AUTO=update; Compose thì không.
+#   2. payment-service, notification-service đọc `${kafka.bootstrap.servers}` nhưng Compose chỉ
+#      truyền KAFKA_SERVERS; notification-service còn đọc nhầm `${payment.kafka.consumer-group-id}`.
+#   3. Image upstream là `:latest` + pull_policy: always → mỗi lần up có thể kéo image khác.
+#      Đổi sang `missing` để giữ nguyên image đã kéo (đóng băng baseline).
+#   4. Image upstream chỉ có linux/amd64 → khai báo rõ platform; trên Mac M-series chạy giả lập.
+# =============================================================================
+
+x-baseline-image: &baseline-image
+  pull_policy: missing
+  platform: linux/amd64
+
+x-ddl-update: &ddl-update
+  SPRING_JPA_HIBERNATE_DDL_AUTO: update
+
+services:
+  # ---------------- Hạ tầng ----------------
+  postgres:      { profiles: [core, full] }
+  redis:         { profiles: [core, full] }
+  kafka:         { profiles: [core, full] }
+  keycloak:      { profiles: [core, full] }
+  apisix:        { profiles: [core, full] }
+  elasticsearch: { profiles: [full] }
+  rustfs:        { profiles: [full] }
+
+  # ---------------- Service core (luồng đặt hàng) ----------------
+  auth-service:
+    <<: *baseline-image
+    profiles: [core, full]
+
+  product-service:
+    <<: *baseline-image
+    profiles: [core, full]
+    environment: *ddl-update
+
+  inventory-service:
+    <<: *baseline-image
+    profiles: [core, full]
+    environment: *ddl-update
+
+  payment-service:
+    <<: *baseline-image
+    profiles: [core, full]
+    environment:
+      <<: *ddl-update
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
+  order-service:
+    <<: *baseline-image
+    profiles: [core, full]
+    environment: *ddl-update
+
+  notification-service:
+    <<: *baseline-image
+    profiles: [core, full]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # Bug copy-paste: code đọc payment.kafka.consumer-group-id,
+      # yml của service lại khai báo notification.kafka.consumer-group-id
+      PAYMENT_KAFKA_CONSUMER_GROUP_ID: notification-groupId
+
+  # ---------------- Service ngoài core ----------------
+  shipping-service:
+    <<: *baseline-image
+    profiles: [full]
+    environment: *ddl-update
+
+  favourite-service:
+    <<: *baseline-image
+    profiles: [full]
+    environment: *ddl-update
+
+  rating-service:    { <<: *baseline-image, profiles: [full] }
+  media-service:     { <<: *baseline-image, profiles: [full] }
+  tax-service:       { <<: *baseline-image, profiles: [full] }
+  promotion-service: { <<: *baseline-image, profiles: [full] }
+  search-service:    { <<: *baseline-image, profiles: [full] }
+  frontend:          { <<: *baseline-image, profiles: [full] }
