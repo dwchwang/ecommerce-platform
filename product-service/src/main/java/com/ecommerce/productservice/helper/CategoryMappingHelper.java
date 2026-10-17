@@ -3,18 +3,15 @@ package com.ecommerce.productservice.helper;
 import com.ecommerce.productservice.entity.Category;
 import com.ecommerce.productservice.dto.CategoryDto;
 
-import java.util.Optional;
-
 public interface CategoryMappingHelper {
 
     static CategoryDto map(final Category category) {
-        final var parentCategory = Optional.ofNullable(category.getParentCategory())
-                .orElseGet(Category::new);
+        final var parentCategory = category.getParentCategory();
         return CategoryDto.builder()
                 .categoryId(category.getCategoryId())
                 .categoryTitle(category.getCategoryTitle())
                 .imageUrl(category.getImageUrl())
-                .parentCategoryDto(
+                .parentCategoryDto(parentCategory == null ? null :
                         CategoryDto.builder()
                                 .categoryId(parentCategory.getCategoryId())
                                 .categoryTitle(parentCategory.getCategoryTitle())
@@ -25,17 +22,20 @@ public interface CategoryMappingHelper {
     }
 
     static Category map(CategoryDto categoryDto) {
-        final var parentCategoryDto = Optional.ofNullable(categoryDto.getParentCategoryDto())
-                .orElseGet(CategoryDto::new);
+        // Chỉ gán parent khi có id: một parent rỗng là entity chưa persist → Hibernate từ chối lưu (TD-01)
+        final var parentCategoryDto = categoryDto.getParentCategoryDto();
+        final Category parentCategory = parentCategoryDto != null && parentCategoryDto.getCategoryId() != null
+                ? Category.builder()
+                        .categoryId(parentCategoryDto.getCategoryId())
+                        .categoryTitle(parentCategoryDto.getCategoryTitle())
+                        .imageUrl(parentCategoryDto.getImageUrl())
+                        .build()
+                : null;
         return Category.builder()
                 .categoryId(categoryDto.getCategoryId())
                 .categoryTitle(categoryDto.getCategoryTitle())
                 .imageUrl(categoryDto.getImageUrl())
-                .parentCategory(Category.builder()
-                        .categoryId(parentCategoryDto.getCategoryId())
-                        .categoryTitle(parentCategoryDto.getCategoryTitle())
-                        .imageUrl(parentCategoryDto.getImageUrl())
-                        .build())
+                .parentCategory(parentCategory)
                 .build();
     }
 

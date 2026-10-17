@@ -29,7 +29,7 @@ public class EventConsumer {
     private final Gson gson = new Gson();
 
     @KafkaListener(topics = KafkaConstant.PROFILE_ONBOARDING_TOPIC,
-            groupId = "${payment.kafka.consumer-group-id}")
+            groupId = "${notification.kafka.consumer-group-id}")
     public void sendEmailKafkaOnboarding(String message) {
         log.info("AUTH-SERVICE Onboarding event: send email on notification service");
         EmailDetails emailDetails = gson.fromJson(message, EmailDetails.class);
@@ -39,7 +39,7 @@ public class EventConsumer {
     }
 
     @KafkaListener(topics = KafkaConstant.STATUS_PAYMENT_SUCCESSFUL,
-            groupId = "${payment.kafka.consumer-group-id}")
+            groupId = "${notification.kafka.consumer-group-id}")
     public void paymentOrderKafkaOnboarding(String message) {
         log.info("Payment event received on notification-service");
         PaymentDto paymentDto = gson.fromJson(message, PaymentDto.class);

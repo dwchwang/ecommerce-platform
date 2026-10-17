@@ -91,7 +91,7 @@ public class CategoryServiceImpl implements CategoryService {
             Category existingCategory = categoryRepository.findById(categoryDto.getCategoryId())
                     .orElseThrow(() -> new CategoryNotFoundException("Category not found with id: " + categoryDto.getCategoryId()));
             BeanUtils.copyProperties(categoryDto, existingCategory, "categoryId", "parentCategoryDto");
-            if (categoryDto.getParentCategoryDto() != null) {
+            if (categoryDto.getParentCategoryDto() != null && categoryDto.getParentCategoryDto().getCategoryId() != null) {
                 existingCategory.setParentCategory(CategoryMappingHelper.map(categoryDto.getParentCategoryDto()));
             }
             return CategoryMappingHelper.map(categoryRepository.save(existingCategory));
@@ -114,7 +114,7 @@ public class CategoryServiceImpl implements CategoryService {
             CategoryDto existingCategoryDto = findById(categoryId);
             Category existingCategory = CategoryMappingHelper.map(existingCategoryDto);
             BeanUtils.copyProperties(categoryDto, existingCategory, "categoryId", "parentCategoryDto");
-            if (categoryDto.getParentCategoryDto() != null) {
+            if (categoryDto.getParentCategoryDto() != null && categoryDto.getParentCategoryDto().getCategoryId() != null) {
                 existingCategory.setParentCategory(CategoryMappingHelper.map(categoryDto.getParentCategoryDto()));
             }
             return CategoryMappingHelper.map(categoryRepository.save(existingCategory));
