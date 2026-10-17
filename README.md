@@ -156,8 +156,7 @@ ecommerce-microservices/
 │   ├── infra/                      # Infrastructure deployments
 │   ├── ingress/                    # NGINX Ingress rules
 │   ├── configmap.yaml
-│   ├── namespace.yaml
-│   └── secrets.yaml
+│   └── namespace.yaml
 ├── Makefile                        # Build & deploy automation
 ├── media-service/                  # Port 8083
 ├── notification-service/           # Port 8090
