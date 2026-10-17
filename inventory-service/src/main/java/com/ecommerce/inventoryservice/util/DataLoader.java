@@ -14,6 +14,11 @@ public class DataLoader implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
+        // Chỉ seed khi bảng rỗng — chạy lại mỗi lần khởi động sẽ nhân đôi dữ liệu (TD-03)
+        if (inventoryRepository.count() > 0) {
+            return;
+        }
+
         Inventory inventory = new Inventory();
         inventory.setProductName("Iphone 13");
         inventory.setQuantity(12);
