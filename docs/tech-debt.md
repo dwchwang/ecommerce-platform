@@ -31,6 +31,7 @@
 | TD-19 | Gọi sync không timeout / retry / circuit breaker | 5 | Claude | giữ cho lab |
 | TD-20 | 13 route `/v3/api-docs` public qua gateway | 6 | Bạn | mở |
 | TD-21 | Email thanh toán gửi tới địa chỉ cứng | 5 | Claude | mở |
+| TD-22 | Spring Boot 3.5 đã hết hỗ trợ OSS (30/06/2026) → cân nhắc lên 4.1 | 1–2 | Claude | chờ quyết định |
 
 ---
 
@@ -130,3 +131,8 @@
 
 ### TD-21 — Email cứng người nhận
 - `notification-service/.../EventConsumer.java` gửi mọi email thanh toán tới một địa chỉ cố định → lấy email từ user của payment.
+
+### TD-22 — Spring Boot 3.5 hết hỗ trợ OSS
+- **Phát hiện:** khi nâng cấp ở Phase 1 (ADR 014). D8 chốt "lên 3.5.x" với giả định 3.5 còn hỗ trợ, nhưng 3.5 đã hết hỗ trợ OSS từ 30/06/2026; 3.5.16 là bản cuối. 4.0 hết 31/12/2026, 4.1 hết 31/07/2027.
+- **Hiện tại:** đã lên 3.5.16 (bước 1 của ADR 014) để không chặn Phase 1.
+- **Hướng xử lý:** sau khi CI chạy được, lên 4.1 trong PR riêng, dùng CI + test + Trivy làm bằng chứng; viết ADR mới. Trong lúc chờ, CVE của Spring không có bản vá → ngoại lệ có thời hạn trong `.trivyignore`.
