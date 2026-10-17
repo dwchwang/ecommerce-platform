@@ -118,11 +118,14 @@ public class ProductService {
 
     private void extractedRange(Number min, Number max, String productField, BoolQuery.Builder b) {
         if (min != null || max != null) {
+            // elasticsearch-java 8.15+: RangeQuery phải chọn kiểu (number/date/term/untyped); from/to cũ = gte/lte
             b.must(m -> m
                     .range(r -> r
-                            .field(productField)
-                            .from(min != null ? min.toString() : null)
-                            .to(max != null ? max.toString() : null)
+                            .number(n -> n
+                                    .field(productField)
+                                    .gte(min != null ? min.doubleValue() : null)
+                                    .lte(max != null ? max.doubleValue() : null)
+                            )
                     )
             );
         }
@@ -156,6 +159,7 @@ public class ProductService {
                         )
                 )
                 .withSourceFilter(new FetchSourceFilter(
+                        true,
                         new String[]{"name"},
                         null)
                 )
