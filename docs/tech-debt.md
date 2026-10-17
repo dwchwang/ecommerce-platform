@@ -3,19 +3,19 @@
 > Danh sách lỗi và nợ kỹ thuật phát hiện được, thay cho GitHub Issues (bỏ từ 2026-10-17).
 > Mỗi mục có mã `TD-xx` để nhắc trong commit/PR (`Fixes TD-03`). Sửa xong thì đổi trạng thái, ghi PR, **không xóa dòng** — lịch sử này là bằng chứng cho portfolio.
 >
-> Trạng thái: `mở` · `đang làm` · `xong` · `giữ cho lab` (cố ý chưa sửa để làm bài trước/sau ở phase sau).
+> Trạng thái: `mở` · `đang làm` · `xong (code)` (đã sửa code, chờ image tự build để chạy thật) · `xong` · `giữ cho lab` (cố ý chưa sửa để làm bài trước/sau ở phase sau).
 > Người làm: **Claude** = sửa code Java/pom/test · **Bạn** = phần DevOps (Docker, Compose, CI, K8s…).
 
 ## Tổng quan
 
 | Mã | Vấn đề | Phase | Người làm | Trạng thái |
 |---|---|---|---|---|
-| TD-01 | Không tạo được category gốc qua API | 1 | Claude | mở |
-| TD-02 | Payment: trùng trả 500, order không tồn tại vẫn tạo được | 1 | Claude | mở |
-| TD-03 | `DataLoader` inventory chèn trùng mỗi lần khởi động | 1 | Claude | mở |
-| TD-04 | Thiếu property `kafka.bootstrap.servers` (payment, notification) | 1 | Claude | mở |
-| TD-05 | Notification đọc nhầm `payment.kafka.consumer-group-id` | 1 | Claude | mở |
-| TD-06 | URL gọi giữa service viết cứng và sai | 1 | Claude | mở |
+| TD-01 | Không tạo được category gốc qua API | 1 | Claude | xong (code) |
+| TD-02 | Payment: trùng trả 500, order không tồn tại vẫn tạo được | 1 | Claude | xong (code) |
+| TD-03 | `DataLoader` inventory chèn trùng mỗi lần khởi động | 1 | Claude | xong (code) |
+| TD-04 | Thiếu property `kafka.bootstrap.servers` (payment, notification) | 1 | Claude | xong (code) |
+| TD-05 | Notification đọc nhầm `payment.kafka.consumer-group-id` | 1 | Claude | xong (code) |
+| TD-06 | URL gọi giữa service viết cứng và sai | 1 | Claude | xong (code) |
 | TD-07 | `/actuator/info` không có commit | 1 | Claude | mở |
 | TD-08 | Image upstream: `latest`, amd64, Jib, chạy root | 1 | Bạn | mở |
 | TD-09 | Keycloak issuer split-horizon (`localhost` vs `keycloak`) | 1 | Bạn | mở |
@@ -56,19 +56,22 @@
 ### TD-04 — Thiếu `kafka.bootstrap.servers`
 - **Phát hiện:** Phase 0.2 (trước là issue #10). `ReactiveKafkaAppProperties` của payment/notification đọc `${kafka.bootstrap.servers}` không default, yml chỉ có `spring.kafka.bootstrap-servers`, Compose/K8s chỉ truyền `KAFKA_SERVERS` → crash khi start.
 - **Tạm thời:** override env `KAFKA_BOOTSTRAP_SERVERS` trong `docker-compose.override.yml`.
-- **Hướng sửa:** khai báo `kafka.bootstrap.servers: ${KAFKA_SERVERS:localhost:9092}` trong `application.yml` (hoặc dùng chung `spring.kafka.*`). Sửa xong → xóa override.
+- **Đã sửa:** `@Value` đọc `spring.kafka.bootstrap-servers` (một nguồn duy nhất). Phần vá trong override **chỉ xóa được khi Compose chạy image tự build** (Phase 1.2) — image upstream vẫn chứa lỗi.
 
 ### TD-05 — Notification đọc nhầm consumer group của payment
 - **Phát hiện:** Phase 0.2 (trước là issue #11). `ReactiveKafkaAppProperties`, `EventConsumer` của notification dùng `${payment.kafka.consumer-group-id}`, yml khai báo `notification.kafka.consumer-group-id`.
 - **Rủi ro nếu sửa sai:** thêm property `payment.*` → notification và payment chung group, chia nhau partition.
 - **Tạm thời:** override env `PAYMENT_KAFKA_CONSUMER_GROUP_ID=notification-groupId`.
-- **Hướng sửa:** đổi placeholder thành `notification.kafka.consumer-group-id`. Sửa xong → xóa override.
+- **Đã sửa:** placeholder → `notification.kafka.consumer-group-id`. Override xóa cùng lúc với TD-04.
 
 ### TD-06 — URL gọi giữa service sai
 - **Phát hiện:** phân tích code + e2e bước 5, 6 (chi tiết `current-architecture.md` §2).
 - order → product: thiếu `/product` → 404. order → auth: `/api/manager/user` không tồn tại.
 - payment → order / auth: `http://ORDER-SERVICE` — Docker DNS vẫn resolve (không phân biệt hoa thường) nhưng không có port → cổng 80 → connection refused; thiếu context-path.
 - **Hướng sửa:** base URL đọc từ property/env (`services.product.url`…), mặc định đúng port + context-path; endpoint user trỏ đúng API của auth-service. Không thêm retry/CB ở đây (TD-19).
+- **Đã sửa (nhánh `fix/phase-1-core-bugs`):** env `AUTH_SERVICE_URL`, `PRODUCT_SERVICE_URL`, `ORDER_SERVICE_URL`; user lấy từ `/auth/api/v1/users/{id}` (bóc `ApiResponse`). Khi sửa phát hiện thêm 2 lỗi cùng chỗ, đã sửa luôn:
+  - `JwtTokenFilter.getTokenFromRequest()` đã trả `"Bearer …"`, `CallAPI` lại thêm `"Bearer "` → header `Bearer Bearer …` → 401 kể cả khi URL đúng.
+  - `CallAPI` gọi `baseUrl()` trên **một** `RestClient.Builder` dùng chung cho mọi đích → request đồng thời có thể bị gán nhầm base URL. Giờ mỗi đích một `RestClient` tạo sẵn.
 
 ### TD-07 — `/actuator/info` không có commit
 - **Hướng sửa:** `git-commit-id-maven-plugin` + `spring-boot-maven-plugin` goal `build-info`; expose `info.git`. Là điều kiện "từ image truy ngược được commit" của Phase 1.
