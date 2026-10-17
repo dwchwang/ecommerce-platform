@@ -1,0 +1,44 @@
+# Cấu hình gitleaks cho repo (TD-12).
+# Bộ rule mặc định không bắt được 2 kiểu leak có thật trong repo này:
+#   - file .env chứa mật khẩu dạng KEY=value (chỉ 1/nhiều dòng bị generic-api-key bắt)
+#   - manifest K8s `kind: Secret` dùng stringData/data (k8s/secrets.yaml: 0 finding)
+# Nên giữ bộ mặc định và thêm 2 rule riêng bên dưới.
+
+title = "ecommerce-platform"
+
+[extend]
+useDefault = true
+
+# Biến nhạy cảm (tên chứa PASSWORD/SECRET/TOKEN/...) có giá trị trong file .env.
+# Giá trị rỗng không tính. .env.example được phép commit (chỉ chứa giá trị giả).
+[[rules]]
+id = "dotenv-secret"
+description = "Biến nhạy cảm có giá trị trong file .env"
+path = '''(^|/)\.env(\.[^/]+)?$'''
+regex = '''(?im)^[ \t]*(?:export[ \t]+)?[A-Z0-9_]*(?:PASSWORD|PASSWD|SECRET|TOKEN|ACCESS_KEY|PRIVATE_KEY|API_KEY|CREDENTIALS?)[A-Z0-9_]*[ \t]*=[ \t]*["']?([^\s"'#]+)'''
+secretGroup = 1
+keywords = ["password", "passwd", "secret", "token", "key", "credential"]
+
+[[rules.allowlists]]
+paths = ['''\.env\.example$''']
+
+# Manifest K8s Secret có data/stringData viết thẳng trong Git.
+# Secret phải đi qua Sealed Secrets/SOPS (local) hoặc External Secrets (AWS).
+# Không bắt SealedSecret (kind khác) và template Helm ({{ ... }}).
+[[rules]]
+id = "k8s-plain-secret"
+description = "Manifest kind: Secret có data/stringData trong Git"
+path = '''\.ya?ml$'''
+regex = '''(?m)^kind:[ \t]*Secret[ \t]*$(?:\n(?:[^-\n].*)?)*?\n(?:stringData|data):[ \t]*((?:\n[ \t]+\S.*)+)'''
+secretGroup = 1
+keywords = ["kind: secret"]
+
+[[rules.allowlists]]
+regexes = ['''\{\{''']
+
+# Ciphertext của Sealed Secrets (bắt đầu bằng "Ag", base64 dài) được thiết kế để
+# commit vào Git — chỉ controller trong cluster giải mã được. Không phải leak.
+[[allowlists]]
+description = "Ciphertext Sealed Secrets"
+targetRules = ["generic-api-key"]
+regexes = ['''^Ag[A-Za-z0-9+/]{100,}={0,2}$''']

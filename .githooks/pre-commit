@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+# Chặn commit có secret (TD-12). Bật một lần cho mỗi bản clone:
+#   git config core.hooksPath .githooks
+# Bỏ qua khẩn cấp (sẽ vẫn bị gitleaks trong CI chặn): git commit --no-verify
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-commit: chưa cài gitleaks (brew install gitleaks) — bỏ qua kiểm tra secret" >&2
+  exit 0
+fi
+exec gitleaks git --staged --redact --no-banner --exit-code 1 .

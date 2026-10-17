@@ -16,12 +16,12 @@
 | TD-04 | Thiếu property `kafka.bootstrap.servers` (payment, notification) | 1 | Claude | xong (code) |
 | TD-05 | Notification đọc nhầm `payment.kafka.consumer-group-id` | 1 | Claude | xong (code) |
 | TD-06 | URL gọi giữa service viết cứng và sai | 1 | Claude | xong (code) |
-| TD-07 | `/actuator/info` không có commit | 1 | Claude | mở |
+| TD-07 | `/actuator/info` không có commit | 1 | Claude | xong (code) |
 | TD-08 | Image upstream: `latest`, amd64, Jib, chạy root | 1 | Bạn | mở |
 | TD-09 | Keycloak issuer split-horizon (`localhost` vs `keycloak`) | 1 | Bạn | mở |
 | TD-10 | Makefile tham chiếu service không tồn tại | 1 | Bạn | mở |
 | TD-11 | Secret dev mặc định commit trong `.env`, `k8s/secrets.yaml` | 1 | Bạn (+ Claude viết postmortem) | mở |
-| TD-12 | gitleaks rule mặc định bỏ sót `.env` / `kind: Secret` | 1 | Bạn | mở |
+| TD-12 | gitleaks rule mặc định bỏ sót `.env` / `kind: Secret` | 1 | Bạn | đang làm |
 | TD-13 | CI gốc `startup_failure` trên fork, tag `latest`, có `kubectl apply` | 1 | Bạn | mở |
 | TD-14 | 12/13 service không có test | 1 | Claude | mở |
 | TD-15 | Liquibase placeholder, schema dựa vào `ddl-auto=update` | 3 | Claude + Bạn | giữ cho lab |
@@ -76,6 +76,7 @@
 
 ### TD-07 — `/actuator/info` không có commit
 - **Hướng sửa:** `git-commit-id-maven-plugin` + `spring-boot-maven-plugin` goal `build-info`; expose `info.git`. Là điều kiện "từ image truy ngược được commit" của Phase 1.
+- **Đã sửa:** PR #17 (jar có `git.properties` + `build-info.properties`). Chờ image tự build (TD-08) để kiểm `/actuator/info` khi chạy thật.
 
 ### TD-08 — Image upstream
 - **Phát hiện:** Phase 0.2 (trước là issue #12). `ghcr.io/hoangtien2k3/*:latest`, `pull_policy: always`, chỉ `linux/amd64` (giả lập trên M2, startup 72–90s khi chạy cả profile), build bằng Jib, chạy root, 420–467MB.
@@ -99,6 +100,7 @@
 ### TD-12 — gitleaks bỏ sót
 - 42 finding / 294 commit nhưng `.env` chỉ bắt 1 dòng, `k8s/secrets.yaml` 0 (giá trị entropy thấp).
 - **Hướng sửa:** `.gitleaks.toml` mở rộng rule mặc định: chặn file `.env*` (trừ `.env.example`), chặn manifest `kind: Secret` có `data`/`stringData`. Kiểm chứng: PR chứa secret giả bị chặn.
+- **Đã làm (local):** `.gitleaks.toml` thêm rule `dotenv-secret` và `k8s-plain-secret`, allowlist ciphertext Sealed Secrets; hook `.githooks/pre-commit`. Quét lịch sử: 42 → 89 finding (`.env` 1 → 34, `k8s/secrets.yaml` 0 → 13, thêm placeholder trong `k8s/github-runner/runner-scale-set.yaml`). Còn: `.gitleaksignore` (TD-11) và gitleaks trong CI (Phase 1 mục D).
 
 ### TD-13 — CI gốc
 - `startup_failure` trên fork (`_build-service.yml` xin `packages: write`, `ci.yml` không khai báo `permissions`), tag `latest`, `cd.yml` có `kubectl apply`/`argocd app sync`, runner ARC dùng PAT.
