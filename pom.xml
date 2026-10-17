@@ -209,6 +209,27 @@
                             </exclude>
                         </excludes>
                     </configuration>
+                    <executions>
+                        <!-- META-INF/build-info.properties → /actuator/info.build (TD-07) -->
+                        <execution>
+                            <goals>
+                                <goal>build-info</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+                <!-- git.properties → /actuator/info.git: truy ngược image về commit (TD-07).
+                     Không fail khi build ở nơi không có .git (vd. Docker build context bỏ .git):
+                     khi đó /actuator/info chỉ thiếu phần git. -->
+                <plugin>
+                    <groupId>io.github.git-commit-id</groupId>
+                    <artifactId>git-commit-id-maven-plugin</artifactId>
+                    <configuration>
+                        <verbose>false</verbose>
+                        <failOnNoGitDirectory>false</failOnNoGitDirectory>
+                        <failOnUnableToExtractRepoInfo>false</failOnUnableToExtractRepoInfo>
+                        <abbrevLength>7</abbrevLength>
+                    </configuration>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
