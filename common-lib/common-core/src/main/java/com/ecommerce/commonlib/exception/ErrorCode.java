@@ -57,7 +57,8 @@ public enum ErrorCode {
 
     // ---- Payment domain ----
     PAYMENT_FAILED("PAY-5001", "payment.failed", HttpStatus.BAD_REQUEST),
-    PAYMENT_NOT_FOUND("PAY-5002", "payment.not.found", HttpStatus.NOT_FOUND);
+    PAYMENT_NOT_FOUND("PAY-5002", "payment.not.found", HttpStatus.NOT_FOUND),
+    PAYMENT_ALREADY_PAID("PAY-5003", "payment.already.paid", HttpStatus.CONFLICT);
 
     private final String code;
     private final String messageKey;

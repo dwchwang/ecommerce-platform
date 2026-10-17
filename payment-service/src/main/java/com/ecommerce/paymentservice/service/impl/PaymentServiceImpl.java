@@ -1,5 +1,7 @@
 package com.ecommerce.paymentservice.service.impl;
 
+import com.ecommerce.commonlib.exception.BusinessException;
+import com.ecommerce.commonlib.exception.ErrorCode;
 import com.ecommerce.paymentservice.constant.KafkaConstant;
 import com.ecommerce.paymentservice.dto.KafkaPaymentDto;
 import com.ecommerce.paymentservice.dto.OrderDto;
@@ -18,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -99,6 +102,17 @@ public class PaymentServiceImpl implements PaymentService {
         return paymentDto;
     }
 
+    // TD-02: trước đây payment cho order không tồn tại vẫn được tạo và vẫn phát event.
+    // Chỉ chặn khi order-service trả 404; lỗi khác (order-service down…) để nổi lên —
+    // xử lý timeout/circuit breaker cho lời gọi này là bài lab Phase 5 (TD-19).
+    private void ensureOrderExists(Integer orderId) {
+        try {
+            callAPI.receiverPaymentDto(orderId, JwtTokenFilter.getTokenFromRequest());
+        } catch (HttpClientErrorException.NotFound e) {
+            throw BusinessException.of(ErrorCode.ORDER_NOT_FOUND);
+        }
+    }
+
     public OrderDto getOrderDto(Integer orderId) {
         return callAPI.receiverPaymentDto(orderId, JwtTokenFilter.getTokenFromRequest());
     }
@@ -107,8 +121,9 @@ public class PaymentServiceImpl implements PaymentService {
     public PaymentDto save(PaymentDto paymentDto) {
         log.info("PaymentDto, service; save payment");
         if (paymentRepository.existsByOrderIdAndIsPayed(paymentDto.getOrderId())) {
-            throw new PaymentNotFoundException("Order has already been paid.");
+            throw BusinessException.of(ErrorCode.PAYMENT_ALREADY_PAID);
         }
+        ensureOrderExists(paymentDto.getOrderId());
         PaymentDto savedPaymentDto = PaymentMappingHelper.map(paymentRepository.save(PaymentMappingHelper.map(paymentDto)));
         KafkaPaymentDto kafkaPaymentDto = KafkaPaymentDto.builder()
                 .paymentId(savedPaymentDto.getPaymentId())

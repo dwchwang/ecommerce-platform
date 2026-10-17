@@ -44,6 +44,13 @@ payment:
   kafka:
     consumer-group-id: payment-groupId
 ---
+# Base URL service đích, gồm cả context-path (TD-06). Mặc định = DNS name trong Compose/K8s.
+services:
+  auth:
+    url: ${AUTH_SERVICE_URL:http://auth-service:8088/auth}
+  order:
+    url: ${ORDER_SERVICE_URL:http://order-service:8084/order}
+---
 management:
   server:
     port: ${MANAGEMENT_PORT:9000}
