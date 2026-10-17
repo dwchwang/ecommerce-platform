@@ -14,6 +14,7 @@ public final class JwtTokenFilter {
         if (!(authentication instanceof JwtAuthenticationToken jwtAuthenticationToken)) {
             return "";
         }
-        return "Bearer " + jwtAuthenticationToken.getToken().getTokenValue();
+        // Trả token thô; CallAPI tự thêm "Bearer " (trước đây bị lặp thành "Bearer Bearer …")
+        return jwtAuthenticationToken.getToken().getTokenValue();
     }
 }

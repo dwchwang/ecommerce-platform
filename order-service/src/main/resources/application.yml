@@ -36,6 +36,13 @@ spring:
   kafka:
     bootstrap-servers: ${KAFKA_SERVERS:localhost:9092}
 ---
+# Base URL service đích, gồm cả context-path (TD-06). Mặc định = DNS name trong Compose/K8s.
+services:
+  auth:
+    url: ${AUTH_SERVICE_URL:http://auth-service:8088/auth}
+  product:
+    url: ${PRODUCT_SERVICE_URL:http://product-service:8086/product}
+---
 management:
   server:
     port: ${MANAGEMENT_PORT:9000}
