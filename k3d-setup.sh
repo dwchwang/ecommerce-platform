@@ -285,20 +285,20 @@ kubectl delete deploy,svc,statefulset api-gateway minio zipkin \
 
 # Secrets — idempotent (apply, never skip) so secrets added later (e.g. storage-secret)
 # are always present even when the cluster was created by an earlier run.
-if [ -f .env ]; then
-  info "Loading secrets from .env..."
-  set -a; source .env; set +a
-  mk_secret() { kubectl create secret generic "$@" -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f - > /dev/null; }
-  mk_secret postgres-secret      --from-literal=POSTGRES_USER="${POSTGRES_USER:-admin}"         --from-literal=POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-admin}"
-  mk_secret keycloak-secret      --from-literal=KEYCLOAK_ADMIN="${KEYCLOAK_ADMIN:-admin}"           --from-literal=KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-admin}"
-  mk_secret redis-secret         --from-literal=REDIS_PASSWORD="${REDIS_PASSWORD:-admin}"
-  mk_secret storage-secret       --from-literal=STORAGE_ACCESS_KEY="${STORAGE_ACCESS_KEY:-admin}"     --from-literal=STORAGE_SECRET_KEY="${STORAGE_SECRET_KEY:-admin}"
-  mk_secret elasticsearch-secret --from-literal=ELASTIC_PASSWORD="${ELASTIC_PASSWORD:-admin}"
-  mk_secret mail-secret          --from-literal=MAIL_USERNAME="${MAIL_USERNAME:-}"                  --from-literal=MAIL_PASSWORD="${MAIL_PASSWORD:-}"
-else
-  info "No .env found — applying k8s/secrets.yaml (default dev values)"
-  kubectl apply -f k8s/secrets.yaml > /dev/null
+# k8s/secrets.yaml đã bị gỡ khỏi Git (TD-11) — secret luôn tạo từ .env local.
+if [ ! -f .env ]; then
+  info "No .env found — creating from .env.example (dev values)"
+  cp .env.example .env
 fi
+info "Loading secrets from .env..."
+set -a; source .env; set +a
+mk_secret() { kubectl create secret generic "$@" -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f - > /dev/null; }
+mk_secret postgres-secret      --from-literal=POSTGRES_USER="${POSTGRES_USER:-admin}"         --from-literal=POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-admin}"
+mk_secret keycloak-secret      --from-literal=KEYCLOAK_ADMIN="${KEYCLOAK_ADMIN:-admin}"           --from-literal=KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-admin}"
+mk_secret redis-secret         --from-literal=REDIS_PASSWORD="${REDIS_PASSWORD:-admin}"
+mk_secret storage-secret       --from-literal=STORAGE_ACCESS_KEY="${STORAGE_ACCESS_KEY:-admin}"     --from-literal=STORAGE_SECRET_KEY="${STORAGE_SECRET_KEY:-admin}"
+mk_secret elasticsearch-secret --from-literal=ELASTIC_PASSWORD="${ELASTIC_PASSWORD:-admin}"
+mk_secret mail-secret          --from-literal=MAIL_USERNAME="${MAIL_USERNAME:-}"                  --from-literal=MAIL_PASSWORD="${MAIL_PASSWORD:-}"
 success "Secrets applied"
 
 kubectl apply -f k8s/configmap.yaml > /dev/null

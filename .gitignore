@@ -71,3 +71,8 @@ files
 ### Flatten-maven-plugin ###
 **/.flattened-pom.xml
 .flattened-pom.xml
+
+### Secret (TD-11) — dùng .env.example làm mẫu ###
+.env
+.env.*
+!.env.example

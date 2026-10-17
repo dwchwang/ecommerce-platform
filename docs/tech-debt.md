@@ -19,8 +19,8 @@
 | TD-07 | `/actuator/info` không có commit | 1 | Claude | xong (code) |
 | TD-08 | Image upstream: `latest`, amd64, Jib, chạy root | 1 | Bạn | mở |
 | TD-09 | Keycloak issuer split-horizon (`localhost` vs `keycloak`) | 1 | Bạn | mở |
-| TD-10 | Makefile tham chiếu service không tồn tại | 1 | Bạn | mở |
-| TD-11 | Secret dev mặc định commit trong `.env`, `k8s/secrets.yaml` | 1 | Bạn (+ Claude viết postmortem) | mở |
+| TD-10 | Makefile tham chiếu service không tồn tại | 1 | Bạn | xong |
+| TD-11 | Secret dev mặc định commit trong `.env`, `k8s/secrets.yaml` | 1 | Bạn (+ Claude viết postmortem) | xong |
 | TD-12 | gitleaks rule mặc định bỏ sót `.env` / `kind: Secret` | 1 | Bạn | đang làm |
 | TD-13 | CI gốc `startup_failure` trên fork, tag `latest`, có `kubectl apply` | 1 | Bạn | mở |
 | TD-14 | 12/13 service không có test | 1 | Claude | mở |
@@ -90,17 +90,19 @@
 ### TD-10 — Makefile lệch compose
 - **Phát hiện:** Phase 0.2 (trước là issue #13). `make infra-up` gọi `mongodb`, `minio` không còn trong compose.
 - **Hướng sửa:** viết lại target theo profile `core`/`full`.
+- **Đã sửa:** Makefile mới chỉ gồm Compose (profile `core`/`full`), Maven, setup (`env`, `hooks`), `secrets-scan`. Bỏ các target kind/K8s/ArgoCD/ARC (tham chiếu file và service không còn, `kubectl apply` trái nguyên tắc GitOps) — Phase 2 làm lại qua GitOps repo.
 
 ### TD-11 — Secret dev commit vào Git
 - `.env`: mọi mật khẩu là giá trị dev mặc định (`admin`), `KEYCLOAK_CLIENT_SECRET` rỗng, mail dùng hộp thư công khai yopmail → **không có credential thật bị lộ**.
 - `k8s/secrets.yaml`: 10 khóa `stringData` plaintext.
 - `docker/keycloak/import/ecommerce-realm.json`: mật khẩu user test.
 - **Hướng sửa (D5):** giữ lịch sử, xóa khỏi HEAD, thêm `.env.example`, `.gitleaksignore` cho finding lịch sử kèm lý do, postmortem `docs/incidents/001-secrets-in-git-history.md` (vấn đề là **quy trình cho phép commit secret**, không phải lộ credential thật).
+- **Đã sửa:** gỡ `.env`, `k8s/secrets.yaml` khỏi HEAD, `.env.example`, `.gitleaksignore` 89 fingerprint có lý do, `k3d-setup.sh` tạo secret từ `.env`. Postmortem: `docs/incidents/001-secrets-in-git-history.md`.
 
 ### TD-12 — gitleaks bỏ sót
 - 42 finding / 294 commit nhưng `.env` chỉ bắt 1 dòng, `k8s/secrets.yaml` 0 (giá trị entropy thấp).
 - **Hướng sửa:** `.gitleaks.toml` mở rộng rule mặc định: chặn file `.env*` (trừ `.env.example`), chặn manifest `kind: Secret` có `data`/`stringData`. Kiểm chứng: PR chứa secret giả bị chặn.
-- **Đã làm (local):** `.gitleaks.toml` thêm rule `dotenv-secret` và `k8s-plain-secret`, allowlist ciphertext Sealed Secrets; hook `.githooks/pre-commit`. Quét lịch sử: 42 → 89 finding (`.env` 1 → 34, `k8s/secrets.yaml` 0 → 13, thêm placeholder trong `k8s/github-runner/runner-scale-set.yaml`). Còn: `.gitleaksignore` (TD-11) và gitleaks trong CI (Phase 1 mục D).
+- **Đã làm (local):** `.gitleaks.toml` thêm rule `dotenv-secret` và `k8s-plain-secret`, allowlist ciphertext Sealed Secrets; hook `.githooks/pre-commit`. Quét lịch sử: 42 → 89 finding (`.env` 1 → 34, `k8s/secrets.yaml` 0 → 13, thêm placeholder trong `k8s/github-runner/runner-scale-set.yaml`). Còn: gitleaks trong CI (Phase 1 mục D).
 
 ### TD-13 — CI gốc
 - `startup_failure` trên fork (`_build-service.yml` xin `packages: write`, `ci.yml` không khai báo `permissions`), tag `latest`, `cd.yml` có `kubectl apply`/`argocd app sync`, runner ARC dùng PAT.

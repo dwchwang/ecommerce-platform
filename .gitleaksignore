@@ -1,0 +1,117 @@
+# .gitleaksignore — finding đã xét và chấp nhận (TD-11, postmortem 001)
+#
+# Quy tắc: chỉ ignore finding NẰM TRONG LỊCH SỬ (không còn ở HEAD) hoặc fixture test.
+# Mỗi nhóm ghi lý do. Không viết lại lịch sử Git (D5) → finding cũ sẽ luôn còn,
+# nên phải ignore theo fingerprint (commit:file:rule:line) thay vì ignore cả file.
+# Finding MỚI không có ở đây → gitleaks vẫn chặn.
+# Thêm dòng mới: chạy gitleaks, copy Fingerprint, ghi lý do ở comment phía trên.
+
+# --- Nhóm 1: .env trong lịch sử (34) -----------------------------------------
+# Giá trị dev mặc định (admin/admin), KEYCLOAK_CLIENT_SECRET rỗng, mail là hộp thư
+# công khai yopmail → không phải credential thật. Gỡ khỏi HEAD ở PR chore/secrets-cleanup-makefile.
+# Đã đổi sang placeholder trong .env.example; xem docs/incidents/001-secrets-in-git-history.md.
+2c8b7690fc7139f908d81b3bda9ff22d8aaa6b33:.env:dotenv-secret:42
+2c8b7690fc7139f908d81b3bda9ff22d8aaa6b33:.env:dotenv-secret:43
+57c2f1dfade89d03056469d1a942dbb2aef15316:.env:dotenv-secret:14
+57c2f1dfade89d03056469d1a942dbb2aef15316:.env:dotenv-secret:25
+57c2f1dfade89d03056469d1a942dbb2aef15316:.env:dotenv-secret:40
+57c2f1dfade89d03056469d1a942dbb2aef15316:.env:dotenv-secret:43
+57c2f1dfade89d03056469d1a942dbb2aef15316:.env:dotenv-secret:66
+57c2f1dfade89d03056469d1a942dbb2aef15316:.env:dotenv-secret:7
+5d765f377bcfa48a933ed3688f45ecef55c87fdb:.env:dotenv-secret:109
+5d765f377bcfa48a933ed3688f45ecef55c87fdb:.env:dotenv-secret:17
+5d765f377bcfa48a933ed3688f45ecef55c87fdb:.env:dotenv-secret:28
+5d765f377bcfa48a933ed3688f45ecef55c87fdb:.env:dotenv-secret:30
+5d765f377bcfa48a933ed3688f45ecef55c87fdb:.env:dotenv-secret:41
+5d765f377bcfa48a933ed3688f45ecef55c87fdb:.env:dotenv-secret:6
+5d765f377bcfa48a933ed3688f45ecef55c87fdb:.env:dotenv-secret:74
+5d765f377bcfa48a933ed3688f45ecef55c87fdb:.env:dotenv-secret:78
+5d765f377bcfa48a933ed3688f45ecef55c87fdb:.env:dotenv-secret:82
+80cd9dde7e0c6c1a504ee0378882bf2044c54952:.env:dotenv-secret:109
+80cd9dde7e0c6c1a504ee0378882bf2044c54952:.env:dotenv-secret:41
+80cd9dde7e0c6c1a504ee0378882bf2044c54952:.env:dotenv-secret:74
+80cd9dde7e0c6c1a504ee0378882bf2044c54952:.env:dotenv-secret:78
+80cd9dde7e0c6c1a504ee0378882bf2044c54952:.env:dotenv-secret:82
+88c2ac4c82b73f109b664aed96710220045996c0:.env:dotenv-secret:14
+88c2ac4c82b73f109b664aed96710220045996c0:.env:dotenv-secret:25
+88c2ac4c82b73f109b664aed96710220045996c0:.env:dotenv-secret:41
+88c2ac4c82b73f109b664aed96710220045996c0:.env:dotenv-secret:42
+88c2ac4c82b73f109b664aed96710220045996c0:.env:dotenv-secret:7
+ad74923380526b266cfb123590f111681423fb3d:.env:dotenv-secret:10
+ad74923380526b266cfb123590f111681423fb3d:.env:dotenv-secret:14
+ad74923380526b266cfb123590f111681423fb3d:.env:dotenv-secret:18
+ad74923380526b266cfb123590f111681423fb3d:.env:dotenv-secret:3
+ad74923380526b266cfb123590f111681423fb3d:.env:dotenv-secret:6
+d4b151e065980703b5afda2fccebaa2af851f402:.env:dotenv-secret:41
+d4b151e065980703b5afda2fccebaa2af851f402:.env:dotenv-secret:42
+
+# --- Nhóm 2: k8s/secrets.yaml trong lịch sử (13) ------------------------------
+# Secret K8s viết thẳng (stringData), cùng giá trị dev mặc định như .env.
+# Gỡ khỏi HEAD; k3d-setup.sh tạo secret từ .env local. Phase 2 thay bằng Sealed Secrets.
+7d4b971c91f3735905d81568af826cc4a1e40f33:k8s/secrets.yaml:k8s-plain-secret:13
+7d4b971c91f3735905d81568af826cc4a1e40f33:k8s/secrets.yaml:k8s-plain-secret:2
+7d4b971c91f3735905d81568af826cc4a1e40f33:k8s/secrets.yaml:k8s-plain-secret:24
+7d4b971c91f3735905d81568af826cc4a1e40f33:k8s/secrets.yaml:k8s-plain-secret:34
+7d4b971c91f3735905d81568af826cc4a1e40f33:k8s/secrets.yaml:k8s-plain-secret:45
+7d4b971c91f3735905d81568af826cc4a1e40f33:k8s/secrets.yaml:k8s-plain-secret:55
+7d4b971c91f3735905d81568af826cc4a1e40f33:k8s/secrets.yaml:k8s-plain-secret:66
+ad74923380526b266cfb123590f111681423fb3d:k8s/secrets.yaml:k8s-plain-secret:13
+ad74923380526b266cfb123590f111681423fb3d:k8s/secrets.yaml:k8s-plain-secret:2
+ad74923380526b266cfb123590f111681423fb3d:k8s/secrets.yaml:k8s-plain-secret:24
+ad74923380526b266cfb123590f111681423fb3d:k8s/secrets.yaml:k8s-plain-secret:34
+ad74923380526b266cfb123590f111681423fb3d:k8s/secrets.yaml:k8s-plain-secret:45
+ad74923380526b266cfb123590f111681423fb3d:k8s/secrets.yaml:k8s-plain-secret:55
+
+# --- Nhóm 3: jwt.secret của tác giả gốc (3, commit 2024) -----------------------
+# Khóa HMAC JWT thời trước Keycloak, file đã bị xóa từ lâu, HEAD không còn.
+# Không dùng ở đâu trong hệ thống hiện tại (xác thực bằng Keycloak/JWKS); không rotate được
+# vì không phải của mình — coi như đã lộ, không bao giờ dùng lại.
+8758eef5f4c2195a0c48e7c274ffddb0910ef35a:order-service/src/main/resources/application.properties:generic-api-key:32
+8758eef5f4c2195a0c48e7c274ffddb0910ef35a:user-service/src/main/resources/application.properties:generic-api-key:37
+c4d067c697cef39afb1b2af760aed3bc63adc471:payment-service/src/main/resources/application.properties:generic-api-key:32
+
+# --- Nhóm 4: test-realm.json — fixture test (38) -------------------------------
+# Realm Keycloak cho test/IT (Testcontainers), client secret giả chỉ tồn tại trong container test.
+5d765f377bcfa48a933ed3688f45ecef55c87fdb:common-lib/src/test/resources/test-realm.json:generic-api-key:505
+5d765f377bcfa48a933ed3688f45ecef55c87fdb:common-lib/src/test/resources/test-realm.json:generic-api-key:605
+d523565179bf91b05306b3122951d1c9c98288d2:search-service/src/it/resources/test-realm.json:generic-api-key:450
+d523565179bf91b05306b3122951d1c9c98288d2:search-service/src/it/resources/test-realm.json:generic-api-key:480
+d523565179bf91b05306b3122951d1c9c98288d2:search-service/src/it/resources/test-realm.json:generic-api-key:517
+d523565179bf91b05306b3122951d1c9c98288d2:search-service/src/it/resources/test-realm.json:generic-api-key:544
+d523565179bf91b05306b3122951d1c9c98288d2:search-service/src/it/resources/test-realm.json:generic-api-key:695
+d523565179bf91b05306b3122951d1c9c98288d2:search-service/src/it/resources/test-realm.json:generic-api-key:724
+d523565179bf91b05306b3122951d1c9c98288d2:search-service/src/test/java/resources/test-realm.json:generic-api-key:450
+d523565179bf91b05306b3122951d1c9c98288d2:search-service/src/test/java/resources/test-realm.json:generic-api-key:480
+d523565179bf91b05306b3122951d1c9c98288d2:search-service/src/test/java/resources/test-realm.json:generic-api-key:517
+d523565179bf91b05306b3122951d1c9c98288d2:search-service/src/test/java/resources/test-realm.json:generic-api-key:544
+d523565179bf91b05306b3122951d1c9c98288d2:search-service/src/test/java/resources/test-realm.json:generic-api-key:695
+d523565179bf91b05306b3122951d1c9c98288d2:search-service/src/test/java/resources/test-realm.json:generic-api-key:724
+d523565179bf91b05306b3122951d1c9c98288d2:tax-service/src/it/resources/test-realm.json:generic-api-key:450
+d523565179bf91b05306b3122951d1c9c98288d2:tax-service/src/it/resources/test-realm.json:generic-api-key:480
+d523565179bf91b05306b3122951d1c9c98288d2:tax-service/src/it/resources/test-realm.json:generic-api-key:517
+d523565179bf91b05306b3122951d1c9c98288d2:tax-service/src/it/resources/test-realm.json:generic-api-key:544
+d523565179bf91b05306b3122951d1c9c98288d2:tax-service/src/it/resources/test-realm.json:generic-api-key:695
+d523565179bf91b05306b3122951d1c9c98288d2:tax-service/src/it/resources/test-realm.json:generic-api-key:724
+d523565179bf91b05306b3122951d1c9c98288d2:tax-service/src/test/resources/test-realm.json:generic-api-key:450
+d523565179bf91b05306b3122951d1c9c98288d2:tax-service/src/test/resources/test-realm.json:generic-api-key:480
+d523565179bf91b05306b3122951d1c9c98288d2:tax-service/src/test/resources/test-realm.json:generic-api-key:517
+d523565179bf91b05306b3122951d1c9c98288d2:tax-service/src/test/resources/test-realm.json:generic-api-key:544
+d523565179bf91b05306b3122951d1c9c98288d2:tax-service/src/test/resources/test-realm.json:generic-api-key:695
+d523565179bf91b05306b3122951d1c9c98288d2:tax-service/src/test/resources/test-realm.json:generic-api-key:724
+dcdfaff9da46a5474b3e5458b353f68d501aee37:promotion-service/src/it/resources/test-realm.json:generic-api-key:450
+dcdfaff9da46a5474b3e5458b353f68d501aee37:promotion-service/src/it/resources/test-realm.json:generic-api-key:480
+dcdfaff9da46a5474b3e5458b353f68d501aee37:promotion-service/src/it/resources/test-realm.json:generic-api-key:517
+dcdfaff9da46a5474b3e5458b353f68d501aee37:promotion-service/src/it/resources/test-realm.json:generic-api-key:544
+dcdfaff9da46a5474b3e5458b353f68d501aee37:promotion-service/src/it/resources/test-realm.json:generic-api-key:695
+dcdfaff9da46a5474b3e5458b353f68d501aee37:promotion-service/src/it/resources/test-realm.json:generic-api-key:724
+dcdfaff9da46a5474b3e5458b353f68d501aee37:rating-service/src/it/resources/test-realm.json:generic-api-key:450
+dcdfaff9da46a5474b3e5458b353f68d501aee37:rating-service/src/it/resources/test-realm.json:generic-api-key:480
+dcdfaff9da46a5474b3e5458b353f68d501aee37:rating-service/src/it/resources/test-realm.json:generic-api-key:517
+dcdfaff9da46a5474b3e5458b353f68d501aee37:rating-service/src/it/resources/test-realm.json:generic-api-key:544
+dcdfaff9da46a5474b3e5458b353f68d501aee37:rating-service/src/it/resources/test-realm.json:generic-api-key:695
+dcdfaff9da46a5474b3e5458b353f68d501aee37:rating-service/src/it/resources/test-realm.json:generic-api-key:724
+
+# --- Nhóm 5: runner ARC — placeholder (1) --------------------------------------
+# github_token = "REPLACE..." (không phải token thật). Runner ARC dùng PAT sẽ bỏ ở Phase 1 mục D (TD-13).
+# Nếu file này bị sửa và có token thật, fingerprint đổi → gitleaks lại chặn.
+2e00d2afa39277b9fa121f9c0025a6421ba4823d:k8s/github-runner/runner-scale-set.yaml:k8s-plain-secret:17
