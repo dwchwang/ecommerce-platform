@@ -1,0 +1,5 @@
+# Build context = frontend/. Không đưa đồ build/cài đặt local vào image.
+**/node_modules
+**/.next
+**/.turbo
+**/.env*
