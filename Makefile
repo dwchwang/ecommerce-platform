@@ -2,7 +2,7 @@
 # Makefile — lệnh tắt cho dev local (TD-10)
 #
 #   make help                 # liệt kê lệnh
-#   make up                   # hạ tầng + 6 service core (profile core)
+#   make up                   # build jar + image, chạy hạ tầng + 6 service core
 #   make up PROFILE=full      # toàn bộ hệ thống (nặng, ~16GB RAM không đủ thoải mái)
 #   make logs SVC=order-service
 #   make test-svc SVC=payment-service
@@ -14,6 +14,10 @@
 PROFILE ?= core
 COMPOSE := docker compose --profile $(PROFILE)
 SVC     ?=
+CORE    := auth-service,product-service,order-service,payment-service,inventory-service,notification-service
+
+# Truyền vào build arg của Compose → OCI label org.opencontainers.image.revision
+export GIT_COMMIT := $(shell git rev-parse --short=7 HEAD 2>/dev/null || echo unknown)
 
 .DEFAULT_GOAL := help
 
@@ -33,9 +37,15 @@ hooks: ## Bật pre-commit hook gitleaks (.githooks/)
 # -----------------------------------------------------------------------------
 # Docker Compose
 # -----------------------------------------------------------------------------
-.PHONY: up up-full down ps logs restart clean
+.PHONY: jars images up up-full down ps logs restart keycloak-http clean
 
-up: env ## Chạy profile core (đổi bằng PROFILE=full)
+jars: ## Build jar cho 6 service core (luôn clean: IDE có thể ghi class hỏng vào target/)
+	mvn -B -q clean package -DskipTests -pl $(CORE) -am
+
+images: jars ## Build image core: ghcr.io/dwchwang/<svc>:dev (arm64)
+	docker compose --profile core build
+
+up: env images ## Build jar + image rồi chạy profile core (đổi bằng PROFILE=full)
 	$(COMPOSE) up -d
 
 up-full: ## Chạy toàn bộ hệ thống (profile full)
@@ -53,6 +63,12 @@ logs: ## Xem log, ví dụ: make logs SVC=order-service
 restart: ## Restart một service: make restart SVC=order-service
 	@[ -n "$(SVC)" ] || (echo "Thiếu SVC, ví dụ: make restart SVC=order-service" && exit 1)
 	docker compose --profile full restart $(SVC)
+
+keycloak-http: ## Cho phép HTTP từ máy host vào Keycloak (dev; chạy lại sau `make clean`)
+	@# Docker Desktop (mạng gvisor) đưa request từ host vào container với IP công khai →
+	@# Keycloak (sslRequired=external) đòi HTTPS. Realm ecommerce đã đặt trong file import;
+	@# realm master không import nên phải đặt bằng kcadm.
+	docker compose exec -T keycloak bash -c '/opt/keycloak/bin/kcadm.sh config credentials --server http://127.0.0.1:8080 --realm master --user "$$KEYCLOAK_ADMIN" --password "$$KEYCLOAK_ADMIN_PASSWORD" && for r in master ecommerce; do /opt/keycloak/bin/kcadm.sh update realms/$$r -s sslRequired=NONE; done'
 
 clean: ## Dừng và XÓA volume (mất dữ liệu Postgres/Kafka/Keycloak)
 	@printf "Xóa toàn bộ volume dev? [y/N] " && read ans && [ "$$ans" = "y" ]

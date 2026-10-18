@@ -17,8 +17,8 @@
 | TD-05 | Notification đọc nhầm `payment.kafka.consumer-group-id` | 1 | Claude | xong (code) |
 | TD-06 | URL gọi giữa service viết cứng và sai | 1 | Claude | xong (code) |
 | TD-07 | `/actuator/info` không có commit | 1 | Claude | xong (code) |
-| TD-08 | Image upstream: `latest`, amd64, Jib, chạy root | 1 | Bạn | mở |
-| TD-09 | Keycloak issuer split-horizon (`localhost` vs `keycloak`) | 1 | Bạn | mở |
+| TD-08 | Image upstream: `latest`, amd64, Jib, chạy root | 1 | Bạn | đang làm |
+| TD-09 | Keycloak issuer split-horizon (`localhost` vs `keycloak`) | 1 | Bạn | đang làm |
 | TD-10 | Makefile tham chiếu service không tồn tại | 1 | Bạn | xong |
 | TD-11 | Secret dev mặc định commit trong `.env`, `k8s/secrets.yaml` | 1 | Bạn (+ Claude viết postmortem) | xong |
 | TD-12 | gitleaks rule mặc định bỏ sót `.env` / `kind: Secret` | 1 | Bạn | đang làm |
@@ -31,7 +31,8 @@
 | TD-19 | Gọi sync không timeout / retry / circuit breaker | 5 | Claude | giữ cho lab |
 | TD-20 | 13 route `/v3/api-docs` public qua gateway | 6 | Bạn | mở |
 | TD-21 | Email thanh toán gửi tới địa chỉ cứng | 5 | Claude | mở |
-| TD-22 | Spring Boot 3.5 đã hết hỗ trợ OSS (30/06/2026) → cân nhắc lên 4.1 | 1–2 | Claude | chờ quyết định |
+| TD-22 | Spring Boot 3.5 đã hết hỗ trợ OSS (30/06/2026) → cân nhắc lên 4.1 | 1–2 | Claude | đã chốt: lên 4.1 sau CI |
+| TD-23 | Health tổng hợp gồm dependency ngoài (SMTP) → unhealthy dù service chạy được | 2 | Claude + Bạn | mở (tạm tắt ở Compose) |
 
 ---
 
@@ -81,11 +82,15 @@
 ### TD-08 — Image upstream
 - **Phát hiện:** Phase 0.2 (trước là issue #12). `ghcr.io/hoangtien2k3/*:latest`, `pull_policy: always`, chỉ `linux/amd64` (giả lập trên M2, startup 72–90s khi chạy cả profile), build bằng Jib, chạy root, 420–467MB.
 - **Hướng sửa:** Dockerfile multi-stage arm64, non-root UID 10001, layered jar, tag = git SHA, push GHCR của fork. So sánh với `baseline-metrics.md`.
+- **Đã làm (chờ build + đo):** `Dockerfile` dùng chung ở gốc repo (`ARG SERVICE`), jar build ngoài Docker, tách layer, `eclipse-temurin:21-jre-noble`, UID 10001, OCI label `revision`/`source`. Compose: 6 service core build image `ghcr.io/dwchwang/<svc>:dev`, healthcheck actuator cổng 9000. Gỡ Jib và 12 Dockerfile cũ.
 
 ### TD-09 — Keycloak issuer split-horizon
 - **Phát hiện:** e2e bước 2. Token lấy qua `localhost:8080` có `iss = http://localhost:8080/realms/ecommerce`, service kỳ vọng `http://keycloak:8080/...` → 401 `The iss claim is not valid`.
 - **Tạm thời:** `curl --resolve keycloak:8080:127.0.0.1 http://keycloak:8080/...` hoặc thêm `127.0.0.1 keycloak` vào `/etc/hosts`.
 - **Hướng sửa:** cố định hostname Keycloak (`KC_HOSTNAME`) để issuer không phụ thuộc client gọi từ đâu. Trên K8s vấn đề lặp lại dưới dạng ingress hostname khác service DNS → ghi quyết định vào ADR ở Phase 2.
+- **Đã làm (chờ e2e):** `KC_HOSTNAME=http://localhost:8080` + `KC_HOSTNAME_BACKCHANNEL_DYNAMIC=true`; 13 service kiểm `iss` = localhost, tải JWKS qua `keycloak:8080` (`SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWKSETURI`).
+- **Kiểm chứng (2026-10-18):** token lấy qua `localhost:8080` có `iss` = issuer trong discovery; gọi `/api/carts`, `/api/orders` qua gateway → 200 (không token → 401).
+- **Vướng thêm khi kiểm:** Docker Desktop (mạng gvisor) đưa request từ host vào container với IP công khai (`172.66.x.x`, thấy trong log `HttpLoggingFilter`) → Keycloak `sslRequired=external` trả 403 `HTTPS required` cho mọi request từ host. Dev: realm `ecommerce` đặt `sslRequired: none` trong file import, realm `master` đặt bằng `make keycloak-http`. K8s/AWS có TLS ở ingress nên không dùng cách này.
 
 ### TD-10 — Makefile lệch compose
 - **Phát hiện:** Phase 0.2 (trước là issue #13). `make infra-up` gọi `mongodb`, `minio` không còn trong compose.
@@ -140,3 +145,10 @@
 - **Phát hiện:** khi nâng cấp ở Phase 1 (ADR 014). D8 chốt "lên 3.5.x" với giả định 3.5 còn hỗ trợ, nhưng 3.5 đã hết hỗ trợ OSS từ 30/06/2026; 3.5.16 là bản cuối. 4.0 hết 31/12/2026, 4.1 hết 31/07/2027.
 - **Hiện tại:** đã lên 3.5.16 (bước 1 của ADR 014) để không chặn Phase 1.
 - **Hướng xử lý:** sau khi CI chạy được, lên 4.1 trong PR riêng, dùng CI + test + Trivy làm bằng chứng; viết ADR mới. Trong lúc chờ, CVE của Spring không có bản vá → ngoại lệ có thời hạn trong `.trivyignore`.
+
+### TD-23 — Health tổng hợp phụ thuộc SMTP
+- **Phát hiện:** Phase 1 (2026-10-18), lần đầu chạy image tự build có healthcheck. `notification-service` luôn `unhealthy`: `/actuator/health` = DOWN chỉ vì `mail` DOWN (`smtp.gmail.com:587` từ chối đăng nhập — dev không có tài khoản mail thật). DB, Kafka, xử lý event vẫn bình thường.
+- **Vì sao quan trọng:** trên K8s nếu readiness dùng health tổng hợp → pod không bao giờ nhận traffic khi nhà cung cấp mail lỗi; nếu liveness dùng → restart liên tục (vi phạm nguyên tắc "liveness không kiểm DB/Kafka", ở đây còn là dịch vụ bên ngoài).
+- **Tạm thời:** Compose đặt `MANAGEMENT_HEALTH_MAIL_ENABLED=false` cho notification-service.
+- **Hướng sửa (Phase 2):** bật `management.endpoint.health.probes.enabled`; nhóm `liveness` chỉ `livenessState`, nhóm `readiness` gồm `readinessState` + DB (không gồm mail, Kafka xem xét riêng); probe K8s và healthcheck Compose trỏ vào nhóm tương ứng.
+
