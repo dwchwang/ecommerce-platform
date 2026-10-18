@@ -370,6 +370,12 @@
                     </execution>
                 </executions>
             </plugin>
+                    <!-- Coverage (TD-14): agent gắn vào surefire + failsafe qua argLine, report ở `verify`
+                 → target/site/jacoco/ gồm cả unit test và integration test. -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
         </plugins>
     </build>
     <profiles>
