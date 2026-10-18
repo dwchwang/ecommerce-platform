@@ -66,8 +66,9 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      # package = compile + unit test + đóng jar; jar dùng cho bước quét CVE bên dưới
-      - run: mvn -B package --fail-at-end -pl "${{ needs.changes.outputs.modules }}" -am
+      # verify = compile + unit test + đóng jar + integration test (src/it, Testcontainers) + JaCoCo.
+      # Jar dùng cho bước quét CVE bên dưới.
+      - run: mvn -B verify --fail-at-end -pl "${{ needs.changes.outputs.modules }}" -am
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/trivy
