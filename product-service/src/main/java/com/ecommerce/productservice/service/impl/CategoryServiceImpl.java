@@ -1,5 +1,7 @@
 package com.ecommerce.productservice.service.impl;
 
+import com.ecommerce.commonlib.exception.BusinessException;
+import com.ecommerce.commonlib.exception.ErrorCode;
 import com.ecommerce.productservice.dto.CategoryDto;
 import com.ecommerce.productservice.entity.Category;
 import com.ecommerce.productservice.exception.wrapper.CategoryNotFoundException;
@@ -71,7 +73,7 @@ public class CategoryServiceImpl implements CategoryService {
         log.info("CategoryDto Service, fetch category by id");
         return categoryRepository.findById(categoryId)
                 .map(CategoryMappingHelper::map)
-                .orElseThrow(() -> new CategoryNotFoundException(String.format("Category with id[%d] not found", categoryId)));
+                .orElseThrow(() -> BusinessException.of(ErrorCode.CATEGORY_NOT_FOUND));
     }
 
     @Override

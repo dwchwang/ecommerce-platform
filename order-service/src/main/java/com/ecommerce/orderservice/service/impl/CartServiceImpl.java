@@ -1,8 +1,9 @@
 package com.ecommerce.orderservice.service.impl;
 
+import com.ecommerce.commonlib.exception.BusinessException;
+import com.ecommerce.commonlib.exception.ErrorCode;
 import com.ecommerce.orderservice.dto.order.CartDto;
 import com.ecommerce.orderservice.entity.Cart;
-import com.ecommerce.orderservice.exception.wrapper.CartNotFoundException;
 import com.ecommerce.orderservice.helper.CartMappingHelper;
 import com.ecommerce.orderservice.repository.CartRepository;
 import com.ecommerce.orderservice.repository.OrderRepository;
@@ -71,7 +72,7 @@ public class CartServiceImpl implements CartService {
         log.info("CartDto, service; fetch cart by id");
         CartDto cartDto = cartRepository.findById(cartId)
                 .map(CartMappingHelper::map)
-                .orElseThrow(() -> new CartNotFoundException(String.format("Cart with id: %d not found", cartId)));
+                .orElseThrow(() -> BusinessException.of(ErrorCode.CART_NOT_FOUND));
         try {
             cartDto.setUserDto(callAPI.receiverUserDto(cartDto.getUserDto().getId(), JwtTokenFilter.getTokenFromRequest()));
         } catch (Exception e) {

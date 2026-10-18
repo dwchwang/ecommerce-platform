@@ -139,3 +139,51 @@ docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}'
 ## 6. Điểm production readiness
 
 8 / 27 — chi tiết ở [`production-readiness.md`](production-readiness.md).
+
+## 7. Sau Phase 1 (đo 2026-10-18)
+
+Image tự build từ `main` bằng Dockerfile chung (PR #20) + thư viện đã vá CVE (PR #21). Cùng máy, cùng Docker Desktop như mục 1.
+
+**Image** — arm64 native, user `10001`, label `org.opencontainers.image.revision` = commit:
+
+| Service | Trước (amd64, root) | Sau (arm64, non-root) |
+|---|---|---|
+| auth-service | 429MB | 578MB |
+| product-service | 429MB | 578MB |
+| order-service | 429MB | 578MB |
+| payment-service | 467MB | 619MB |
+| inventory-service | 420MB | 569MB |
+| notification-service | 452MB | 602MB |
+
+Image **lớn hơn** khoảng 150MB: base Ubuntu noble (JRE ~165MB + thư viện ~79MB chiếm phần lớn). Đã thử 3 base cho order-service:
+- Ubuntu noble (chọn): 577MB, nén 161MB. Tầng OS **0 CRITICAL / 0 HIGH**. JRE 21.0.12. Có bash/wget để debug.
+- Alpine: 437MB, nén 137MB. Tầng OS 1 HIGH (libexpat). Không có bash.
+- Distroless: 422MB, nén 126MB. Tầng OS **1 CRITICAL / 15 HIGH**. JRE cũ hơn (21.0.10). Không có shell.
+
+Kết luận: đổi base không làm image nhỏ đi rõ rệt; ưu tiên tầng OS sạch CVE. Muốn nhỏ thật thì cắt JRE bằng `jlink` (để làm sau, có số trước/sau). Tiêu chí Phase 1 đổi từ "nhỏ hơn" thành "0 CRITICAL/HIGH ở tầng OS + arm64 + non-root".
+
+**CVE (Trivy 0.58.1, CRITICAL + HIGH):**
+- Trước khi vá: 5 CRITICAL + 8 HIGH ở thư viện Java (Tomcat, spring-webmvc, Jackson, httpcore5, PostgreSQL driver), thêm 1 HIGH lz4-java ở payment, notification.
+- Sau PR #21: chỉ còn 2 CRITICAL của `spring-webmvc` 6.2.19, bản vá chỉ có ở Spring 7 → TD-22.
+
+**Thời gian khởi động** (dòng `Started ... in X seconds`):
+
+| Trường hợp | Trước | Sau |
+|---|---|---|
+| Cả profile cùng lúc (6 JVM tranh CPU) | 72–90s | 20–28s |
+| Khởi động lẻ một service | 19–47s | 5–7s |
+
+Phần lớn khác biệt đến từ việc bỏ giả lập amd64.
+
+**RAM** mỗi service core: 460–490MB → 390–440MB. Compose chưa đặt giới hạn RAM nên `MaxRAMPercentage=75` đang tính trên 9.7GB của Docker Desktop; số thật sẽ đo lại khi có `resources.limits` ở Phase 2.
+
+**Test:** 34 → **48 test**, 0 fail; `mvn -B clean test` toàn repo ~75s. Đã có test ở order, payment, product, inventory (trước: 0). Notification vẫn chưa có test (TD-14).
+
+**e2e** (`plan/phase-1-e2e-test.md`, commit `fd637a1`): 9/9 bước đạt.
+- Lần chạy đầu phát hiện thêm một lỗi: payment cho order không tồn tại vẫn trả 500. Nguyên nhân là order-service ném exception riêng mà handler chung không nhận ra. Đã sửa cùng PR với số đo này.
+- Category gốc tạo được. Đọc lại order có thông tin product.
+- Payment: lần đầu 200, gửi lại 409, order không tồn tại 404.
+- notification nhận event qua Kafka.
+- Inventory không tăng bản ghi sau restart.
+- `/actuator/info` = label image = `git rev-parse --short HEAD`.
+

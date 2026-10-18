@@ -8,7 +8,6 @@ import com.ecommerce.paymentservice.dto.OrderDto;
 import com.ecommerce.paymentservice.dto.PaymentDto;
 import com.ecommerce.paymentservice.dto.UserDto;
 import com.ecommerce.paymentservice.event.EventProducer;
-import com.ecommerce.paymentservice.exception.wrapper.PaymentNotFoundException;
 import com.ecommerce.paymentservice.helper.PaymentMappingHelper;
 import com.ecommerce.paymentservice.repository.PaymentRepository;
 import com.ecommerce.paymentservice.security.JwtTokenFilter;
@@ -85,7 +84,7 @@ public class PaymentServiceImpl implements PaymentService {
         log.info("PaymentDto, service; fetch payment by id");
         PaymentDto paymentDto = paymentRepository.findById(paymentId)
                 .map(PaymentMappingHelper::map)
-                .orElseThrow(() -> new PaymentNotFoundException(String.format("Payment with id: %d not found", paymentId)));
+                .orElseThrow(() -> BusinessException.of(ErrorCode.PAYMENT_NOT_FOUND));
         try {
             String token = JwtTokenFilter.getTokenFromRequest();
             OrderDto orderDto = callAPI.receiverPaymentDto(paymentDto.getOrderDto().getOrderId(), token);

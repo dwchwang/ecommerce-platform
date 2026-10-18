@@ -10,15 +10,15 @@
 
 | Mã | Vấn đề | Phase | Người làm | Trạng thái |
 |---|---|---|---|---|
-| TD-01 | Không tạo được category gốc qua API | 1 | Claude | xong (code) |
-| TD-02 | Payment: trùng trả 500, order không tồn tại vẫn tạo được | 1 | Claude | xong (code) |
-| TD-03 | `DataLoader` inventory chèn trùng mỗi lần khởi động | 1 | Claude | xong (code) |
-| TD-04 | Thiếu property `kafka.bootstrap.servers` (payment, notification) | 1 | Claude | xong (code) |
-| TD-05 | Notification đọc nhầm `payment.kafka.consumer-group-id` | 1 | Claude | xong (code) |
-| TD-06 | URL gọi giữa service viết cứng và sai | 1 | Claude | xong (code) |
-| TD-07 | `/actuator/info` không có commit | 1 | Claude | xong (code) |
-| TD-08 | Image upstream: `latest`, amd64, Jib, chạy root | 1 | Bạn | đang làm |
-| TD-09 | Keycloak issuer split-horizon (`localhost` vs `keycloak`) | 1 | Bạn | đang làm |
+| TD-01 | Không tạo được category gốc qua API | 1 | Claude | xong |
+| TD-02 | Payment: trùng trả 500, order không tồn tại vẫn tạo được | 1 | Claude | xong |
+| TD-03 | `DataLoader` inventory chèn trùng mỗi lần khởi động | 1 | Claude | xong |
+| TD-04 | Thiếu property `kafka.bootstrap.servers` (payment, notification) | 1 | Claude | xong |
+| TD-05 | Notification đọc nhầm `payment.kafka.consumer-group-id` | 1 | Claude | xong |
+| TD-06 | URL gọi giữa service viết cứng và sai | 1 | Claude | xong |
+| TD-07 | `/actuator/info` không có commit | 1 | Claude | xong |
+| TD-08 | Image upstream: `latest`, amd64, Jib, chạy root | 1 | Bạn | xong |
+| TD-09 | Keycloak issuer split-horizon (`localhost` vs `keycloak`) | 1 | Bạn | xong |
 | TD-10 | Makefile tham chiếu service không tồn tại | 1 | Bạn | xong |
 | TD-11 | Secret dev mặc định commit trong `.env`, `k8s/secrets.yaml` | 1 | Bạn (+ Claude viết postmortem) | xong |
 | TD-12 | gitleaks rule mặc định bỏ sót `.env` / `kind: Secret` | 1 | Bạn | đang làm |
@@ -33,6 +33,7 @@
 | TD-21 | Email thanh toán gửi tới địa chỉ cứng | 5 | Claude | mở |
 | TD-22 | Spring Boot 3.5 đã hết hỗ trợ OSS (30/06/2026) → cân nhắc lên 4.1 | 1–2 | Claude | đã chốt: lên 4.1 sau CI |
 | TD-23 | Health tổng hợp gồm dependency ngoài (SMTP) → unhealthy dù service chạy được | 2 | Claude + Bạn | mở (tạm tắt ở Compose) |
+| TD-24 | Frontend suy địa chỉ API từ subdomain (`web.x` → `api.x`), không chạy khi truy cập bằng IP | 2 | Bạn | mở (dùng sslip.io) |
 
 ---
 
@@ -49,6 +50,7 @@
 - Payment trùng cho cùng order → chặn đúng nhưng trả **500** (`PaymentNotFoundException` bị map thành lỗi chung) thay vì **409**.
 - Payment cho `orderId = 999` (không tồn tại) → **200**, vẫn phát event `SUCCESSFUL` dù `paymentStatus = NOT_STARTED`.
 - **Hướng sửa:** exception riêng cho "đã thanh toán" → 409; kiểm tra order tồn tại qua order-service (`/api/orders/existOrderId`, phụ thuộc TD-06) → 404. Idempotency key đầy đủ để Phase 5.
+- **Kiểm chứng e2e Phase 1 (2026-10-18):** lần đầu order không tồn tại vẫn ra **500** — order-service ném `OrderNotFoundException`, handler chung của common-lib không biết lớp này → 500, payment không nhận được 404. Unit test của PR #16 mock order-service trả 404 nên không bắt được. Sửa: các chỗ tra theo id ở order/cart/payment/product/category dùng `BusinessException.of(ErrorCode.X_NOT_FOUND)`. Chạy lại: 404 `ORD-4001`. Bài học: unit test mock ranh giới service không thay được e2e.
 
 ### TD-03 — `DataLoader` inventory chèn trùng
 - **Phát hiện:** e2e bước 8 — bảng `inventory` có 2 bản `Iphone 13`, 2 bản `Macbook Pro 13.3` sau 2 lần khởi động; API trả kết quả trùng.
@@ -108,6 +110,10 @@
 - 42 finding / 294 commit nhưng `.env` chỉ bắt 1 dòng, `k8s/secrets.yaml` 0 (giá trị entropy thấp).
 - **Hướng sửa:** `.gitleaks.toml` mở rộng rule mặc định: chặn file `.env*` (trừ `.env.example`), chặn manifest `kind: Secret` có `data`/`stringData`. Kiểm chứng: PR chứa secret giả bị chặn.
 - **Đã làm (local):** `.gitleaks.toml` thêm rule `dotenv-secret` và `k8s-plain-secret`, allowlist ciphertext Sealed Secrets; hook `.githooks/pre-commit`. Quét lịch sử: 42 → 89 finding (`.env` 1 → 34, `k8s/secrets.yaml` 0 → 13, thêm placeholder trong `k8s/github-runner/runner-scale-set.yaml`). Còn: gitleaks trong CI (Phase 1 mục D).
+
+### TD-24 — Frontend cần hostname có subdomain
+- `frontend/packages/lib/src/api.ts` suy API là `api.<domain gốc>` từ `window.location` (bỏ subdomain đầu). Truy cập bằng IP (`13.250.1.2`) → suy ra `api.250.1.2`, sai. Ưu điểm: một image chạy mọi môi trường, không đóng cứng `NEXT_PUBLIC_API_URL` lúc build.
+- **Hướng xử lý (Phase 2, D16):** cluster RKE2 không có domain → dùng `web.<ip-gạch-ngang>.sslip.io` (DNS công cộng tự trỏ về IP), APISIX định tuyến theo host. Không cần sửa code.
 
 ### TD-13 — CI gốc
 - `startup_failure` trên fork (`_build-service.yml` xin `packages: write`, `ci.yml` không khai báo `permissions`), tag `latest`, `cd.yml` có `kubectl apply`/`argocd app sync`, runner ARC dùng PAT.
