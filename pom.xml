@@ -42,7 +42,6 @@
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
         <revision>1.0-SNAPSHOT</revision>
-        <jib.skip>false</jib.skip>
         <lombok.version>1.18.34</lombok.version>
         <mapstruct.version>1.5.5.Final</mapstruct.version>
         <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
@@ -330,24 +329,6 @@
                     <configuration>
                         <failBuildOnCVSS>8</failBuildOnCVSS>
                         <skipTestScope>true</skipTestScope>
-                    </configuration>
-                </plugin>
-                <plugin>
-                    <groupId>com.google.cloud.tools</groupId>
-                    <artifactId>jib-maven-plugin</artifactId>
-                    <version>3.5.2</version>
-                    <configuration>
-                        <skip>${jib.skip}</skip>
-                        <from>
-                            <image>eclipse-temurin:21-jre-alpine</image>
-                        </from>
-                        <container>
-                            <format>OCI</format>
-                            <creationTime>USE_CURRENT_TIMESTAMP</creationTime>
-                            <jvmFlags>
-                                <jvmFlag>-Djava.security.egd=file:/dev/./urandom</jvmFlag>
-                            </jvmFlags>
-                        </container>
                     </configuration>
                 </plugin>
             </plugins>

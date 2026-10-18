@@ -1,93 +1,155 @@
 # =============================================================================
-# docker-compose.override.yml — cấu hình môi trường dev local (Phase 0)
+# docker-compose.override.yml — cấu hình môi trường dev local
 #
 # Docker Compose tự động gộp file này với docker-compose.yml.
-# Không sửa code ứng dụng; chỉ bù các chỗ Compose đang lệch so với k8s/configmap.yaml
-# để hệ thống khởi động được, và thêm profile để không phải chạy cả 13 service.
 #
-# Cách dùng:
+# Cách dùng (xem thêm `make help`):
+#   make up                                # build jar + image core, chạy profile core
 #   docker compose --profile core up -d    # hạ tầng + 6 service trên luồng đặt hàng
 #   docker compose --profile full up -d    # toàn bộ hệ thống
-#   docker compose --profile core down
 #
-# Technical debt được bù tạm ở đây (xử lý triệt để ở các phase sau):
-#   1. Liquibase changelog của nhiều service chỉ là placeholder `SELECT 1;`,
-#      trong khi ddl-auto = validate → thiếu bảng, service crash.
-#      K8s chạy được vì configmap đặt SPRING_JPA_HIBERNATE_DDL_AUTO=update; Compose thì không.
-#   2. payment-service, notification-service đọc `${kafka.bootstrap.servers}` nhưng Compose chỉ
-#      truyền KAFKA_SERVERS; notification-service còn đọc nhầm `${payment.kafka.consumer-group-id}`.
-#   3. Image upstream là `:latest` + pull_policy: always → mỗi lần up có thể kéo image khác.
-#      Đổi sang `missing` để giữ nguyên image đã kéo (đóng băng baseline).
-#   4. Image upstream chỉ có linux/amd64 → khai báo rõ platform; trên Mac M-series chạy giả lập.
+# 6 service core (Phase 1, TD-08): image tự build từ Dockerfile ở gốc repo, arm64 native,
+# non-root. Jar phải build trước (`make jars`) — Dockerfile chỉ đóng gói jar.
+# Tag local mặc định `dev`; CI dùng git short SHA (không có `latest`).
+#
+# 7 service ngoài core: vẫn dùng image upstream (amd64, giả lập) — đóng băng baseline.
+#
+# Technical debt còn bù tạm ở đây:
+#   1. TD-15 (giữ cho lab Phase 3): Liquibase changelog nhiều service chỉ là `SELECT 1;`
+#      trong khi ddl-auto = validate → đặt SPRING_JPA_HIBERNATE_DDL_AUTO=update.
+#   2. Image upstream (ngoài core): `:latest` + amd64 → pull_policy: missing, platform rõ ràng.
+#
+# Keycloak issuer (TD-09): KC_HOSTNAME cố định issuer = http://localhost:8080/realms/ecommerce
+# dù token được lấy từ máy dev (localhost) hay từ trong network (keycloak:8080).
+# Service kiểm `iss` theo URL đó, còn tải khóa (JWKS) qua DNS nội bộ keycloak:8080.
+# Đã gỡ (Phase 1): phần vá Kafka cho payment/notification — code đã sửa (TD-04, TD-05).
 # =============================================================================
 
 x-baseline-image: &baseline-image
   pull_policy: missing
   platform: linux/amd64
 
+# Healthcheck qua cổng actuator 9000 (không phải cổng app). Image runtime không có curl/wget
+# nên dùng /dev/tcp của bash; actuator trả 200 khi UP, 503 khi DOWN.
+x-actuator-health: &actuator-health
+  healthcheck:
+    test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3 && head -n1 <&3 | grep -q ' 200 '"]
+    interval: 10s
+    timeout: 3s
+    retries: 5
+    start_period: 120s
+
 x-ddl-update: &ddl-update
   SPRING_JPA_HIBERNATE_DDL_AUTO: update
+
+# Có jwk-set-uri thì Spring Boot không gọi discovery theo issuer-uri (localhost trong container
+# không phải Keycloak), chỉ dùng issuer-uri để kiểm claim `iss`.
+x-jwt: &jwt
+  JWT_ISSUER_URI: http://localhost:8080/realms/ecommerce
+  SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWKSETURI: http://keycloak:8080/realms/ecommerce/protocol/openid-connect/certs
 
 services:
   # ---------------- Hạ tầng ----------------
   postgres:      { profiles: [core, full] }
   redis:         { profiles: [core, full] }
   kafka:         { profiles: [core, full] }
-  keycloak:      { profiles: [core, full] }
+  keycloak:
+    profiles: [core, full]
+    environment:
+      KC_HOSTNAME: http://localhost:8080
+      # Endpoint backchannel (token, JWKS) theo URL request → service/APISIX gọi keycloak:8080 vẫn được
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
   apisix:        { profiles: [core, full] }
   elasticsearch: { profiles: [full] }
   rustfs:        { profiles: [full] }
 
-  # ---------------- Service core (luồng đặt hàng) ----------------
+  # ---------------- Service core (luồng đặt hàng) — image tự build ----------------
   auth-service:
-    <<: *baseline-image
+    <<: *actuator-health
+    image: ghcr.io/dwchwang/auth-service:${IMAGE_TAG:-dev}
+    build:
+      context: .
+      args:
+        SERVICE: auth-service
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+    pull_policy: build
     profiles: [core, full]
+    environment: *jwt
 
   product-service:
-    <<: *baseline-image
+    <<: *actuator-health
+    image: ghcr.io/dwchwang/product-service:${IMAGE_TAG:-dev}
+    build:
+      context: .
+      args:
+        SERVICE: product-service
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+    pull_policy: build
     profiles: [core, full]
-    environment: *ddl-update
+    environment: { <<: [*ddl-update, *jwt] }
 
   inventory-service:
-    <<: *baseline-image
+    <<: *actuator-health
+    image: ghcr.io/dwchwang/inventory-service:${IMAGE_TAG:-dev}
+    build:
+      context: .
+      args:
+        SERVICE: inventory-service
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+    pull_policy: build
     profiles: [core, full]
-    environment: *ddl-update
+    environment: { <<: [*ddl-update, *jwt] }
 
   payment-service:
-    <<: *baseline-image
+    <<: *actuator-health
+    image: ghcr.io/dwchwang/payment-service:${IMAGE_TAG:-dev}
+    build:
+      context: .
+      args:
+        SERVICE: payment-service
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+    pull_policy: build
     profiles: [core, full]
-    environment:
-      <<: *ddl-update
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    environment: { <<: [*ddl-update, *jwt] }
 
   order-service:
-    <<: *baseline-image
+    <<: *actuator-health
+    image: ghcr.io/dwchwang/order-service:${IMAGE_TAG:-dev}
+    build:
+      context: .
+      args:
+        SERVICE: order-service
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+    pull_policy: build
     profiles: [core, full]
-    environment: *ddl-update
+    environment: { <<: [*ddl-update, *jwt] }
 
   notification-service:
-    <<: *baseline-image
+    <<: *actuator-health
+    image: ghcr.io/dwchwang/notification-service:${IMAGE_TAG:-dev}
+    build:
+      context: .
+      args:
+        SERVICE: notification-service
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+    pull_policy: build
     profiles: [core, full]
-    environment:
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      # Bug copy-paste: code đọc payment.kafka.consumer-group-id,
-      # yml của service lại khai báo notification.kafka.consumer-group-id
-      PAYMENT_KAFKA_CONSUMER_GROUP_ID: notification-groupId
+    environment: *jwt
 
   # ---------------- Service ngoài core ----------------
   shipping-service:
     <<: *baseline-image
     profiles: [full]
-    environment: *ddl-update
+    environment: { <<: [*ddl-update, *jwt] }
 
   favourite-service:
     <<: *baseline-image
     profiles: [full]
-    environment: *ddl-update
+    environment: { <<: [*ddl-update, *jwt] }
 
-  rating-service:    { <<: *baseline-image, profiles: [full] }
-  media-service:     { <<: *baseline-image, profiles: [full] }
-  tax-service:       { <<: *baseline-image, profiles: [full] }
-  promotion-service: { <<: *baseline-image, profiles: [full] }
-  search-service:    { <<: *baseline-image, profiles: [full] }
+  rating-service:    { <<: *baseline-image, profiles: [full], environment: *jwt }
+  media-service:     { <<: *baseline-image, profiles: [full], environment: *jwt }
+  tax-service:       { <<: *baseline-image, profiles: [full], environment: *jwt }
+  promotion-service: { <<: *baseline-image, profiles: [full], environment: *jwt }
+  search-service:    { <<: *baseline-image, profiles: [full], environment: *jwt }
   frontend:          { <<: *baseline-image, profiles: [full] }

@@ -17,8 +17,8 @@
 | TD-05 | Notification đọc nhầm `payment.kafka.consumer-group-id` | 1 | Claude | xong (code) |
 | TD-06 | URL gọi giữa service viết cứng và sai | 1 | Claude | xong (code) |
 | TD-07 | `/actuator/info` không có commit | 1 | Claude | xong (code) |
-| TD-08 | Image upstream: `latest`, amd64, Jib, chạy root | 1 | Bạn | mở |
-| TD-09 | Keycloak issuer split-horizon (`localhost` vs `keycloak`) | 1 | Bạn | mở |
+| TD-08 | Image upstream: `latest`, amd64, Jib, chạy root | 1 | Bạn | đang làm |
+| TD-09 | Keycloak issuer split-horizon (`localhost` vs `keycloak`) | 1 | Bạn | đang làm |
 | TD-10 | Makefile tham chiếu service không tồn tại | 1 | Bạn | xong |
 | TD-11 | Secret dev mặc định commit trong `.env`, `k8s/secrets.yaml` | 1 | Bạn (+ Claude viết postmortem) | xong |
 | TD-12 | gitleaks rule mặc định bỏ sót `.env` / `kind: Secret` | 1 | Bạn | đang làm |
@@ -81,11 +81,13 @@
 ### TD-08 — Image upstream
 - **Phát hiện:** Phase 0.2 (trước là issue #12). `ghcr.io/hoangtien2k3/*:latest`, `pull_policy: always`, chỉ `linux/amd64` (giả lập trên M2, startup 72–90s khi chạy cả profile), build bằng Jib, chạy root, 420–467MB.
 - **Hướng sửa:** Dockerfile multi-stage arm64, non-root UID 10001, layered jar, tag = git SHA, push GHCR của fork. So sánh với `baseline-metrics.md`.
+- **Đã làm (chờ build + đo):** `Dockerfile` dùng chung ở gốc repo (`ARG SERVICE`), jar build ngoài Docker, tách layer, `eclipse-temurin:21-jre-noble`, UID 10001, OCI label `revision`/`source`. Compose: 6 service core build image `ghcr.io/dwchwang/<svc>:dev`, healthcheck actuator cổng 9000. Gỡ Jib và 12 Dockerfile cũ.
 
 ### TD-09 — Keycloak issuer split-horizon
 - **Phát hiện:** e2e bước 2. Token lấy qua `localhost:8080` có `iss = http://localhost:8080/realms/ecommerce`, service kỳ vọng `http://keycloak:8080/...` → 401 `The iss claim is not valid`.
 - **Tạm thời:** `curl --resolve keycloak:8080:127.0.0.1 http://keycloak:8080/...` hoặc thêm `127.0.0.1 keycloak` vào `/etc/hosts`.
 - **Hướng sửa:** cố định hostname Keycloak (`KC_HOSTNAME`) để issuer không phụ thuộc client gọi từ đâu. Trên K8s vấn đề lặp lại dưới dạng ingress hostname khác service DNS → ghi quyết định vào ADR ở Phase 2.
+- **Đã làm (chờ e2e):** `KC_HOSTNAME=http://localhost:8080` + `KC_HOSTNAME_BACKCHANNEL_DYNAMIC=true`; 13 service kiểm `iss` = localhost, tải JWKS qua `keycloak:8080` (`SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWKSETURI`).
 
 ### TD-10 — Makefile lệch compose
 - **Phát hiện:** Phase 0.2 (trước là issue #13). `make infra-up` gọi `mongodb`, `minio` không còn trong compose.

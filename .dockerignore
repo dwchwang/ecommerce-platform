@@ -1,23 +1,5 @@
-.git/
-.idea/
-.vscode/
-.DS_Store
-**/.DS_Store
-
-# Maven build outputs — không cần trong Docker context
-**/target/
-!**/target/classes/
-
-# Frontend artifacts
-frontend/node_modules/
-frontend/.next/
-
-# Docs / scripts không liên quan
-docs/
-scripts/
-k8s/
-README.md
-Makefile
-
-# Colima / Docker cache
-**/*.log
+# Build context = thư mục gốc repo, nhưng Dockerfile chỉ cần jar đã build sẵn.
+# Dùng danh sách cho phép: chặn tất cả, chỉ mở jar → context vài chục MB thay vì cả repo,
+# và .env, .git, source, secret không bao giờ lọt vào image.
+*
+!*/target/*.jar

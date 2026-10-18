@@ -2,7 +2,7 @@
 # Makefile — lệnh tắt cho dev local (TD-10)
 #
 #   make help                 # liệt kê lệnh
-#   make up                   # hạ tầng + 6 service core (profile core)
+#   make up                   # build jar + image, chạy hạ tầng + 6 service core
 #   make up PROFILE=full      # toàn bộ hệ thống (nặng, ~16GB RAM không đủ thoải mái)
 #   make logs SVC=order-service
 #   make test-svc SVC=payment-service
@@ -14,6 +14,10 @@
 PROFILE ?= core
 COMPOSE := docker compose --profile $(PROFILE)
 SVC     ?=
+CORE    := auth-service,product-service,order-service,payment-service,inventory-service,notification-service
+
+# Truyền vào build arg của Compose → OCI label org.opencontainers.image.revision
+export GIT_COMMIT := $(shell git rev-parse --short=7 HEAD 2>/dev/null || echo unknown)
 
 .DEFAULT_GOAL := help
 
@@ -33,9 +37,15 @@ hooks: ## Bật pre-commit hook gitleaks (.githooks/)
 # -----------------------------------------------------------------------------
 # Docker Compose
 # -----------------------------------------------------------------------------
-.PHONY: up up-full down ps logs restart clean
+.PHONY: jars images up up-full down ps logs restart clean
 
-up: env ## Chạy profile core (đổi bằng PROFILE=full)
+jars: ## Build jar cho 6 service core (Dockerfile chỉ đóng gói jar có sẵn)
+	mvn -B -q package -DskipTests -pl $(CORE) -am
+
+images: jars ## Build image core: ghcr.io/dwchwang/<svc>:dev (arm64)
+	docker compose --profile core build
+
+up: env jars ## Build jar + image rồi chạy profile core (đổi bằng PROFILE=full)
 	$(COMPOSE) up -d
 
 up-full: ## Chạy toàn bộ hệ thống (profile full)
