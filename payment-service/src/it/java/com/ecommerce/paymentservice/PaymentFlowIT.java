@@ -18,9 +18,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.kafka.test.EmbeddedKafkaBroker;
+import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
@@ -28,7 +28,6 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.kafka.KafkaContainer;
 
 import java.time.Duration;
 import java.util.List;
@@ -46,26 +45,26 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Payment trên PostgreSQL + Kafka thật (TD-14): lưu, phát event, chặn trùng (409), chặn order không tồn tại (404).
+ * Payment trên PostgreSQL (container) + Kafka (broker nhúng) (TD-14): lưu, phát event, chặn trùng (409), chặn order không tồn tại (404).
  * Lời gọi sang order-service được mock.
  */
-@SpringBootTest(properties = "spring.jpa.hibernate.ddl-auto=update") // Liquibase còn placeholder (TD-15)
+@SpringBootTest(properties = {
+        "spring.jpa.hibernate.ddl-auto=update", // Liquibase còn placeholder (TD-15)
+        // Producer tự cấu hình đọc thẳng property này (@Value)
+        "spring.kafka.bootstrap-servers=${spring.embedded.kafka.brokers}"})
 @AutoConfigureMockMvc
 @Testcontainers
+// Broker KRaft chạy trong JVM thay vì container: KafkaContainer của Testcontainers 1.21 không
+// khởi động được với Docker Desktop 29 (advertised listener rơi về 0.0.0.0).
+@EmbeddedKafka(partitions = 1, topics = KafkaConstant.STATUS_PAYMENT_SUCCESSFUL)
 class PaymentFlowIT {
 
     @Container
     @ServiceConnection
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
 
-    @Container
-    static KafkaContainer kafka = new KafkaContainer("apache/kafka:3.9.0"); // cùng bản với Compose
-
-    // Producer tự cấu hình đọc thẳng property này (@Value), không qua KafkaConnectionDetails
-    @DynamicPropertySource
-    static void kafkaProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
-    }
+    @Autowired
+    EmbeddedKafkaBroker kafka;
 
     @Autowired
     MockMvc mvc;
@@ -80,7 +79,7 @@ class PaymentFlowIT {
     @BeforeEach
     void subscribe() {
         consumer = new KafkaConsumer<>(Map.of(
-                ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.getBootstrapServers(),
+                ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.getBrokersAsString(),
                 ConsumerConfig.GROUP_ID_CONFIG, "it-" + UUID.randomUUID(),
                 ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest",
                 ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class,
