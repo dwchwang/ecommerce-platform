@@ -9,7 +9,8 @@
 #   docker compose --profile full up -d    # toàn bộ hệ thống
 #
 # 6 service core (Phase 1, TD-08): image tự build từ Dockerfile ở gốc repo, arm64 native,
-# non-root. Jar phải build trước (`make jars`) — Dockerfile chỉ đóng gói jar.
+# non-root. Build bằng `make images` (build jar rồi image, gắn commit vào label);
+# `docker compose up` dùng image đã có, chỉ tự build khi image chưa tồn tại (label = unknown).
 # Tag local mặc định `dev`; CI dùng git short SHA (không có `latest`).
 #
 # 7 service ngoài core: vẫn dùng image upstream (amd64, giả lập) — đóng băng baseline.
@@ -72,7 +73,8 @@ services:
       args:
         SERVICE: auth-service
         GIT_COMMIT: ${GIT_COMMIT:-unknown}
-    pull_policy: build
+    # Ghi đè `always` của file gốc: image chỉ có ở máy, không kéo từ registry
+    pull_policy: missing
     profiles: [core, full]
     environment: *jwt
 
@@ -84,7 +86,8 @@ services:
       args:
         SERVICE: product-service
         GIT_COMMIT: ${GIT_COMMIT:-unknown}
-    pull_policy: build
+    # Ghi đè `always` của file gốc: image chỉ có ở máy, không kéo từ registry
+    pull_policy: missing
     profiles: [core, full]
     environment: { <<: [*ddl-update, *jwt] }
 
@@ -96,7 +99,8 @@ services:
       args:
         SERVICE: inventory-service
         GIT_COMMIT: ${GIT_COMMIT:-unknown}
-    pull_policy: build
+    # Ghi đè `always` của file gốc: image chỉ có ở máy, không kéo từ registry
+    pull_policy: missing
     profiles: [core, full]
     environment: { <<: [*ddl-update, *jwt] }
 
@@ -108,7 +112,8 @@ services:
       args:
         SERVICE: payment-service
         GIT_COMMIT: ${GIT_COMMIT:-unknown}
-    pull_policy: build
+    # Ghi đè `always` của file gốc: image chỉ có ở máy, không kéo từ registry
+    pull_policy: missing
     profiles: [core, full]
     environment: { <<: [*ddl-update, *jwt] }
 
@@ -120,7 +125,8 @@ services:
       args:
         SERVICE: order-service
         GIT_COMMIT: ${GIT_COMMIT:-unknown}
-    pull_policy: build
+    # Ghi đè `always` của file gốc: image chỉ có ở máy, không kéo từ registry
+    pull_policy: missing
     profiles: [core, full]
     environment: { <<: [*ddl-update, *jwt] }
 
@@ -132,9 +138,14 @@ services:
       args:
         SERVICE: notification-service
         GIT_COMMIT: ${GIT_COMMIT:-unknown}
-    pull_policy: build
+    # Ghi đè `always` của file gốc: image chỉ có ở máy, không kéo từ registry
+    pull_policy: missing
     profiles: [core, full]
-    environment: *jwt
+    environment:
+      <<: *jwt
+      # TD-23: health tổng hợp cả SMTP (smtp.gmail.com) → dev không có mail thật nên luôn DOWN,
+      # container bị đánh dấu unhealthy dù service vẫn nhận event bình thường.
+      MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
 
   # ---------------- Service ngoài core ----------------
   shipping-service:

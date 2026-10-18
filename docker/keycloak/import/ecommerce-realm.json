@@ -1,6 +1,7 @@
 {
   "realm": "ecommerce",
   "enabled": true,
+  "sslRequired": "none",
   "displayName": "Ecommerce Realm",
   "registrationAllowed": false,
   "loginWithEmailAllowed": true,
