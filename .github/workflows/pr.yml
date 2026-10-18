@@ -83,8 +83,8 @@ jobs:
             aquasec/trivy@sha256:ab70a02200597efa04748f210f793936eb647cbcdb0ea69cc30b226d6f5a22c7 \
             rootfs --cache-dir /cache --scanners vuln --severity CRITICAL --exit-code 1 \
             --ignorefile .trivyignore.yaml \
-            --db-repository public.ecr.aws/aquasecurity/trivy-db \
-            --java-db-repository public.ecr.aws/aquasecurity/trivy-java-db \
+            --db-repository mirror.gcr.io/aquasec/trivy-db:2,ghcr.io/aquasecurity/trivy-db:2,public.ecr.aws/aquasecurity/trivy-db:2 \
+            --java-db-repository mirror.gcr.io/aquasec/trivy-java-db:1,ghcr.io/aquasecurity/trivy-java-db:1,public.ecr.aws/aquasecurity/trivy-java-db:1 \
             --skip-dirs common-lib .
 
   gitleaks:
