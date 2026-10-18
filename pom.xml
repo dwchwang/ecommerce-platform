@@ -78,6 +78,8 @@
         <jackson-bom.version>2.21.8</jackson-bom.version>
         <postgresql.version>42.7.14</postgresql.version>
         <httpcore5.version>5.4.4</httpcore5.version>
+        <!-- Không do Boot quản lý; kafka-clients kéo theo 1.10.1. -->
+        <lz4-java.version>1.11.4</lz4-java.version>
     </properties>
     <dependencyManagement>
         <dependencies>
@@ -115,6 +117,11 @@
                 <groupId>com.ecommerce.microservices</groupId>
                 <artifactId>common-kafka</artifactId>
                 <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>at.yawk.lz4</groupId>
+                <artifactId>lz4-java</artifactId>
+                <version>${lz4-java.version}</version>
             </dependency>
             <dependency>
                 <groupId>software.amazon.awssdk</groupId>
