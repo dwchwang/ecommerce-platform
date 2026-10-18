@@ -1,7 +1,8 @@
 package com.ecommerce.orderservice.service.impl;
 
+import com.ecommerce.commonlib.exception.BusinessException;
+import com.ecommerce.commonlib.exception.ErrorCode;
 import com.ecommerce.orderservice.dto.order.OrderDto;
-import com.ecommerce.orderservice.exception.wrapper.OrderNotFoundException;
 import com.ecommerce.orderservice.helper.OrderMappingHelper;
 import com.ecommerce.orderservice.repository.OrderRepository;
 import com.ecommerce.orderservice.service.CallAPI;
@@ -66,7 +67,7 @@ public class OrderServiceImpl implements OrderService {
         log.info("OrderDto, service; fetch order by id");
         OrderDto orderDto = orderRepository.findById(orderId)
                 .map(OrderMappingHelper::map)
-                .orElseThrow(() -> new OrderNotFoundException(String.format("Order with id: %d not found", orderId)));
+                .orElseThrow(() -> BusinessException.of(ErrorCode.ORDER_NOT_FOUND));
         try {
             orderDto.setProductDto(callAPI.receiverProductDto(orderDto.getProductId()));
         } catch (Exception e) {
