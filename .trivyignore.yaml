@@ -1,0 +1,16 @@
+# Ngoại lệ Trivy — mỗi mục phải có lý do (statement) và ngày hết hạn (expired_at).
+# Hết hạn → Trivy báo lại → CI đỏ, buộc xem xét lại. Chính sách gate: roadmap Phase 6.1.
+vulnerabilities:
+  - id: CVE-2026-47884
+    purls:
+      - pkg:maven/org.springframework/spring-webmvc@6.2.19
+    expired_at: 2027-01-31
+    statement: >-
+      spring-webmvc 6.2.19 do Spring Boot 3.5.16 quản lý; bản vá chỉ có ở 7.0.9 (Spring Boot 4).
+      Nâng Boot 4.1 theo TD-22. Đo 2026-10-18.
+  - id: CVE-2026-47890
+    purls:
+      - pkg:maven/org.springframework/spring-webmvc@6.2.19
+    expired_at: 2027-01-31
+    statement: >-
+      Như CVE-2026-47884 — chờ Spring Boot 4.1 (TD-22).

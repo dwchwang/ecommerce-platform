@@ -22,7 +22,7 @@
 | TD-10 | Makefile tham chiếu service không tồn tại | 1 | Bạn | xong |
 | TD-11 | Secret dev mặc định commit trong `.env`, `k8s/secrets.yaml` | 1 | Bạn (+ Claude viết postmortem) | xong |
 | TD-12 | gitleaks rule mặc định bỏ sót `.env` / `kind: Secret` | 1 | Bạn | đang làm |
-| TD-13 | CI gốc `startup_failure` trên fork, tag `latest`, có `kubectl apply` | 1 | Bạn | mở |
+| TD-13 | CI gốc `startup_failure` trên fork, tag `latest`, có `kubectl apply` | 1 | Bạn | đang làm (`pr.yml` + `main.yml`) |
 | TD-14 | 12/13 service không có test | 1 | Claude | mở |
 | TD-15 | Liquibase placeholder, schema dựa vào `ddl-auto=update` | 3 | Claude + Bạn | giữ cho lab |
 | TD-16 | Lỗi gọi sync bị nuốt, API vẫn trả 200 | 8 | Claude | giữ cho lab |

@@ -1,0 +1,170 @@
+# Main pipeline (roadmap 1.5, ADR 012)
+# Mỗi commit lên main: build image arm64 cho service/app có thay đổi → Trivy chặn CRITICAL → push GHCR.
+# Tag = git short SHA (khớp git.commit.id.abbrev trong /actuator/info). Không có tag latest.
+# Không có credential cluster; Phase 3 sẽ thêm bước commit tag vào GitOps repo.
+name: main
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # chạy tay = build lại tất cả
+
+permissions:
+  contents: read
+
+concurrency:
+  group: main
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io/${{ github.repository_owner }}
+  TRIVY_IMAGE: aquasec/trivy@sha256:ab70a02200597efa04748f210f793936eb647cbcdb0ea69cc30b226d6f5a22c7 # 0.58.1
+
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      services: ${{ steps.pick.outputs.services }}
+      apps: ${{ steps.pick.outputs.apps }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          # Chỉ 6 service core có image (D1); 7 service còn lại thêm khi cần
+          filters: |
+            java-all: [pom.xml, 'common-lib/**', Dockerfile, .trivyignore.yaml, '.github/workflows/main.yml']
+            front-all: ['frontend/packages/**', 'frontend/package.json', 'frontend/pnpm-lock.yaml', '.github/workflows/main.yml']
+            auth-service: 'auth-service/**'
+            product-service: 'product-service/**'
+            order-service: 'order-service/**'
+            payment-service: 'payment-service/**'
+            inventory-service: 'inventory-service/**'
+            notification-service: 'notification-service/**'
+            web: 'frontend/apps/web/**'
+            admin: 'frontend/apps/admin/**'
+      - id: pick
+        env:
+          CHANGES: ${{ steps.filter.outputs.changes }}
+          MANUAL: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          core='["auth-service","product-service","order-service","payment-service","inventory-service","notification-service"]'
+          front='["web","admin"]'
+          if [ "$MANUAL" = true ]; then CHANGES='["java-all","front-all"]'; fi
+          services=$(jq -c --argjson all "$core" 'if index("java-all") then $all else map(select(IN($all[]))) end' <<<"$CHANGES")
+          apps=$(jq -c --argjson all "$front" 'if index("front-all") then $all else map(select(IN($all[]))) end' <<<"$CHANGES")
+          echo "services=$services" | tee -a "$GITHUB_OUTPUT"
+          echo "apps=$apps" | tee -a "$GITHUB_OUTPUT"
+
+  service:
+    needs: changes
+    if: needs.changes.outputs.services != '[]'
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.changes.outputs.services) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      # Chạy lại test của module trước khi đóng gói: jar đã qua test chính là jar được ship
+      - run: mvn -B package -pl ${{ matrix.service }} -am
+      - run: echo "TAG=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: ${{ env.REGISTRY }}/${{ matrix.service }}:${{ env.TAG }}
+          build-args: |
+            SERVICE=${{ matrix.service }}
+            GIT_COMMIT=${{ env.TAG }}
+            SOURCE_URL=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ github.run_id }}-${{ matrix.service }}
+          restore-keys: trivy-db-
+      - name: trivy (chặn CRITICAL)
+        run: |
+          mkdir -p ~/.cache/trivy
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$HOME/.cache/trivy:/cache" -v "$PWD/.trivyignore.yaml:/.trivyignore.yaml:ro" \
+            "$TRIVY_IMAGE" image --cache-dir /cache --scanners vuln --severity CRITICAL --exit-code 1 \
+            --ignorefile /.trivyignore.yaml \
+            --db-repository public.ecr.aws/aquasecurity/trivy-db \
+            --java-db-repository public.ecr.aws/aquasecurity/trivy-java-db \
+            "$REGISTRY/${{ matrix.service }}:$TAG"
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: docker push "$REGISTRY/${{ matrix.service }}:$TAG"
+      - name: tóm tắt
+        run: |
+          {
+            echo "### ${{ matrix.service }}"
+            echo "- image: \`$REGISTRY/${{ matrix.service }}:$TAG\`"
+            echo "- digest: \`$(docker image inspect --format '{{index .RepoDigests 0}}' "$REGISTRY/${{ matrix.service }}:$TAG")\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  frontend:
+    needs: changes
+    if: needs.changes.outputs.apps != '[]'
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.changes.outputs.apps) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: echo "TAG=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # Không truyền NEXT_PUBLIC_API_URL: app tự suy API từ hostname lúc chạy → một image cho mọi môi trường (TD-24)
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: frontend
+          file: frontend/apps/${{ matrix.app }}/Dockerfile
+          load: true
+          tags: ${{ env.REGISTRY }}/${{ matrix.app }}:${{ env.TAG }}
+          labels: |
+            org.opencontainers.image.title=${{ matrix.app }}
+            org.opencontainers.image.revision=${{ env.TAG }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.licenses=MIT
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ github.run_id }}-${{ matrix.app }}
+          restore-keys: trivy-db-
+      - name: trivy (chặn CRITICAL)
+        run: |
+          mkdir -p ~/.cache/trivy
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$HOME/.cache/trivy:/cache" -v "$PWD/.trivyignore.yaml:/.trivyignore.yaml:ro" \
+            "$TRIVY_IMAGE" image --cache-dir /cache --scanners vuln --severity CRITICAL --exit-code 1 \
+            --ignorefile /.trivyignore.yaml \
+            --db-repository public.ecr.aws/aquasecurity/trivy-db \
+            --java-db-repository public.ecr.aws/aquasecurity/trivy-java-db \
+            "$REGISTRY/${{ matrix.app }}:$TAG"
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: docker push "$REGISTRY/${{ matrix.app }}:$TAG"

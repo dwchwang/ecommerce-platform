@@ -1,0 +1,101 @@
+# PR pipeline (TD-13, roadmap 1.4)
+# Chạy cho mọi PR vào main: chỉ build/test module có thay đổi, quét secret, quét CVE thư viện.
+# Không build image, không push, không có credential nào ngoài GITHUB_TOKEN chỉ đọc.
+name: pr
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read   # paths-filter đọc danh sách file của PR qua API
+    outputs:
+      modules: ${{ steps.modules.outputs.modules }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          # "all" = thay đổi ảnh hưởng mọi module → build tất cả
+          filters: |
+            all: [pom.xml, 'common-lib/**', '.github/workflows/pr.yml']
+            auth-service: 'auth-service/**'
+            product-service: 'product-service/**'
+            order-service: 'order-service/**'
+            payment-service: 'payment-service/**'
+            inventory-service: 'inventory-service/**'
+            notification-service: 'notification-service/**'
+            shipping-service: 'shipping-service/**'
+            rating-service: 'rating-service/**'
+            search-service: 'search-service/**'
+            promotion-service: 'promotion-service/**'
+            tax-service: 'tax-service/**'
+            favourite-service: 'favourite-service/**'
+            media-service: 'media-service/**'
+      - id: modules
+        env:
+          CHANGES: ${{ steps.filter.outputs.changes }}
+        # Ra chuỗi cho `mvn -pl`: rỗng = không có module Java nào đổi (PR chỉ sửa docs…)
+        run: |
+          if jq -e 'index("all")' <<<"$CHANGES" >/dev/null; then
+            modules=$(sed -n 's#.*<module>\(.*-service\)</module>.*#\1#p' pom.xml | paste -sd, -)
+          else
+            modules=$(jq -r 'join(",")' <<<"$CHANGES")
+          fi
+          echo "modules=$modules" | tee -a "$GITHUB_OUTPUT"
+
+  test:
+    needs: changes
+    if: needs.changes.outputs.modules != ''
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      # package = compile + unit test + đóng jar; jar dùng cho bước quét CVE bên dưới
+      - run: mvn -B package --fail-at-end -pl "${{ needs.changes.outputs.modules }}" -am
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ github.run_id }}
+          restore-keys: trivy-db-
+      # Quét thư viện trong jar đã build (chính xác hơn đọc pom). CRITICAL → fail.
+      # Ngoại lệ có hạn ở .trivyignore.yaml.
+      - name: trivy (thư viện trong jar)
+        run: |
+          mkdir -p ~/.cache/trivy
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/src:ro" -v "$HOME/.cache/trivy:/cache" -w /src \
+            aquasec/trivy@sha256:ab70a02200597efa04748f210f793936eb647cbcdb0ea69cc30b226d6f5a22c7 \
+            rootfs --cache-dir /cache --scanners vuln --severity CRITICAL --exit-code 1 \
+            --ignorefile .trivyignore.yaml \
+            --db-repository public.ecr.aws/aquasecurity/trivy-db \
+            --java-db-repository public.ecr.aws/aquasecurity/trivy-java-db \
+            --skip-dirs common-lib .
+
+  gitleaks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: cài gitleaks 8.30.1 (kiểm checksum)
+        run: |
+          curl -sSfL -o gitleaks.tgz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tgz" | sha256sum -c -
+          tar -xzf gitleaks.tgz gitleaks
+      # Chỉ quét commit của PR; finding lịch sử đã ghi nhận trong .gitleaksignore (D5)
+      - run: ./gitleaks git --redact --no-banner --exit-code 1 --log-opts="origin/${{ github.base_ref }}..HEAD" .
